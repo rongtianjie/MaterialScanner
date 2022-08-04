@@ -1,0 +1,10 @@
+colour_demosaicing==0.2.2
+loguru==0.6.0
+numpy==1.22.3
+opencv_contrib_python==4.6.0.66
+PyExifTool==0.5.3
+rawpy==0.17.1
+scipy==1.8.1
+taichi==1.0.4
+torch==1.11.0
+tqdm==4.64.0

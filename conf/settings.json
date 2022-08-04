@@ -1,0 +1,5 @@
+{
+    "console_log_level": "INFO",
+    "file_log_level": "INFO",
+    "multi_process_num": 6
+}

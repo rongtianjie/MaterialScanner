@@ -49,7 +49,7 @@ def generate_grayboard(grayboard_path, lens, blur_size=21, max_sample_count=5):
         out_grays_blur = cv2.GaussianBlur(out_grays.transpose(1,2,0), (blur_size, blur_size), 0)
         out_grays_blur = out_grays_blur.transpose(2,0,1).astype(np.uint16)
 
-    np.savez(f'./pre_data/grayboard_result_{lens}.npz',sn=None, lens_sn=None, data=out_grays_blur, wb=wb_sum, camera_height=np.array(919.17493749))
+    np.savez(f'./pre_data/grayboard_result_{lens}.npz',sn=None, lens_sn=None, data=out_grays_blur, wb=wb_sum, camera_height=None)
     logger.info(f'Grayboard data saved to pre_data/grayboard_result_{lens}.npz')
 
 

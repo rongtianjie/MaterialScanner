@@ -14,6 +14,7 @@ def produce_normal_map(mid_undist_image, depth, conf):
     name = conf["name"]
 
     camera_height = conf["geometry"]["camera_height"]
+    grayboard_height = conf["geometry"]["grayboard_height"]
     rot_count = conf["geometry"]['rot_count']
     light_num = len(conf["geometry"]['light_str'])//2
     mid_mat_k = conf["camera_matrices"]["mid_mat_k"]
@@ -21,6 +22,7 @@ def produce_normal_map(mid_undist_image, depth, conf):
     gray_scale = conf["grayboard"]["gray_scale"]
     kernel_size = conf["normal_map"]["filter_original_size"]
     grayboard_data_path = conf["grayboard_data_path"]
+
 
     # test calculate camera height
     if False:
@@ -34,7 +36,11 @@ def produce_normal_map(mid_undist_image, depth, conf):
 
     grayboard_data = np.load(grayboard_data_path, allow_pickle=True)
 
-    grayboard_depth = grayboard_data['camera_height'].tolist()
+    if True or grayboard_data['camera_height'] is None:
+        grayboard_depth = camera_height - grayboard_height
+        logger.info(f'No grayboard_depth loaded, use calculated grayboard_depth={grayboard_depth} instead.')
+    else: 
+        grayboard_depth = grayboard_data['camera_height'].tolist()
 
     # calculate light field
     plain_depth = np.ones([8192//scale, 8192//scale]) * camera_height
@@ -134,7 +140,6 @@ def produce_normal_map(mid_undist_image, depth, conf):
 def get_light_coord(conf):
     light_str = conf['light_str']
     rot_count = conf['rot_count']
-    light_num = len(conf['light_str'])//2
     rot_clockwise = conf['rot_clockwise']
 
     start_pos = [list(map(float, light_str.split(','))) for light_str in light_str]

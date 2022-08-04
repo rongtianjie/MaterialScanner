@@ -19,6 +19,7 @@
     },
     "geometry":{
         "camera_height": 954.61,
+        "grayboard_height": 3.6, 
         "focal_factor": 35180.0,
         "light_str": [
             " 43, 196.7,792.1",

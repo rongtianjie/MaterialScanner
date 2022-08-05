@@ -65,7 +65,18 @@ def produce_normal_map(mid_undist_image, depth, conf):
     
     mid_texture_image = mid_undist_image[:, 68*4//scale:-68*4//scale, 432*4//scale:-432*4//scale]
 
-    
+    # use weight
+    print(mid_texture_image.shape)
+    print(lightfield_image.shape)
+    b = mid_texture_image/65535/lightfield_image
+    print(b.shape)
+    b = b.transpose(1,2,0)
+    light_coord = light_coord.reshape(-1, 1, 3)
+    pixel_coord = np.expand_dims(pixel_coord.reshape(-1, 3), axis = 0).astype(np.float32)
+    light_dir = light_coord - pixel_coord
+    a = F.normalize(torch.FloatTensor(light_dir).transpose(0, 1), dim = -1).numpy()
+    np.savez(f'C:/Users/ecoplants/Desktop/data.npz', a = a, b = b)
+    logger.info('save data')
     
     # slove normal without shadow
     normal, albedo_weight = solve_normal(mid_texture_image, lightfield_image, light_coord, pixel_coord, 0, rot_count, rot_count, light_num)
@@ -172,34 +183,36 @@ def get_lightfield_from_grayboard(grayboard_image, gray_scale, light_coord, pixe
     # pixel_coord = np.expand_dims(pixel_coord, axis=0).astype(np.float32)
 
     lightfields = []
-    for i in trange(grayboard_image.shape[0]):
-        pixel_coord = pixel_coord.astype(np.float32)
-        line_diff = light_coord[i].reshape(1, 1, 3).astype(np.float32) - pixel_coord
-        z_diff = z_coord - pixel_coord[..., 2:]
-        grayboard_plane = z_diff * line_diff[..., :2] / line_diff[..., 2:] + pixel_coord[..., :2]
+    with trange(grayboard_image.shape[0]) as t:
+        t.set_description('Calculate lightfield: ')
+        for i in t:
+            pixel_coord = pixel_coord.astype(np.float32)
+            line_diff = light_coord[i].reshape(1, 1, 3).astype(np.float32) - pixel_coord
+            z_diff = z_coord - pixel_coord[..., 2:]
+            grayboard_plane = z_diff * line_diff[..., :2] / line_diff[..., 2:] + pixel_coord[..., :2]
 
-        idx_x = grayboard_plane[..., 1] / (-grayboard_depth / float(mat_k[1, 1])) + float(mat_k[1, 2])
-        idx_y = grayboard_plane[..., 0] / (grayboard_depth / float(mat_k[0, 0])) + float(mat_k[0, 2])
-        sp_x = (grayboard_image.shape[1] - idx_x.shape[0])//2
-        sp_y = (grayboard_image.shape[2] - idx_y.shape[1])//2
-        fp_x = (grayboard_image.shape[1] + idx_x.shape[0])//2
-        fp_y = (grayboard_image.shape[2] + idx_y.shape[1])//2
-        idx_x = np.maximum(sp_x, np.minimum(fp_x, idx_x)).astype(np.uint32)
-        idx_y = np.maximum(sp_y, np.minimum(fp_y, idx_y)).astype(np.uint32)
-        idx_image = grayboard_image.shape[2]*idx_x + idx_y
-        # idx_image += (np.arange(grayboard_image.shape[0])*grayboard_image.shape[1]*grayboard_image.shape[2]).reshape(-1, 1, 1).astype(np.uint32)
+            idx_x = grayboard_plane[..., 1] / (-grayboard_depth / float(mat_k[1, 1])) + float(mat_k[1, 2])
+            idx_y = grayboard_plane[..., 0] / (grayboard_depth / float(mat_k[0, 0])) + float(mat_k[0, 2])
+            sp_x = (grayboard_image.shape[1] - idx_x.shape[0])//2
+            sp_y = (grayboard_image.shape[2] - idx_y.shape[1])//2
+            fp_x = (grayboard_image.shape[1] + idx_x.shape[0])//2
+            fp_y = (grayboard_image.shape[2] + idx_y.shape[1])//2
+            idx_x = np.maximum(sp_x, np.minimum(fp_x, idx_x)).astype(np.uint32)
+            idx_y = np.maximum(sp_y, np.minimum(fp_y, idx_y)).astype(np.uint32)
+            idx_image = grayboard_image.shape[2]*idx_x + idx_y
+            # idx_image += (np.arange(grayboard_image.shape[0])*grayboard_image.shape[1]*grayboard_image.shape[2]).reshape(-1, 1, 1).astype(np.uint32)
 
-        lightfield = grayboard_image[i].reshape(-1)[idx_image].astype(np.float32)/65535/gray_scale
+            lightfield = grayboard_image[i].reshape(-1)[idx_image].astype(np.float32)/65535/gray_scale
 
-        grayboard_coord = np.concatenate((
-            grayboard_plane, np.ones_like(grayboard_plane[..., 1:]) * z_coord), axis=-1)
-        dis_square_pixel = (line_diff**2).sum(axis=-1)
-        dis_square_grayboard = ((light_coord[i].reshape(1, 1, 3).astype(np.float32) - grayboard_coord)**2).sum(axis=-1)
-        lightfield *= dis_square_grayboard / dis_square_pixel
+            grayboard_coord = np.concatenate((
+                grayboard_plane, np.ones_like(grayboard_plane[..., 1:]) * z_coord), axis=-1)
+            dis_square_pixel = (line_diff**2).sum(axis=-1)
+            dis_square_grayboard = ((light_coord[i].reshape(1, 1, 3).astype(np.float32) - grayboard_coord)**2).sum(axis=-1)
+            lightfield *= dis_square_grayboard / dis_square_pixel
 
-        light_cos = line_diff[...,2]/np.sqrt((line_diff**2).sum(axis = -1))
-        lightfield/=light_cos
-        lightfields.append(lightfield)
+            light_cos = line_diff[...,2]/np.sqrt((line_diff**2).sum(axis = -1))
+            lightfield/=light_cos
+            lightfields.append(lightfield)
 
     return np.array(lightfields)
 
@@ -240,7 +253,6 @@ def solve_normal(mid_img, gb_img, light_coord, pixel_coord, rank_start, rank_fin
         albedo_weight[idx] = all_weight[idx]
         albedo_weight_list.append(albedo_weight.view(-1, rot_count*light_num))
 
-    # gc.collect()
     tsr_normal = torch.stack(normal_list)
     tsr_normal = tsr_normal.view(img_width,-1,3)
     tsr_albedo_weight = torch.stack(albedo_weight_list)

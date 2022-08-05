@@ -24,13 +24,16 @@ def produce_height_map(mid_undist_image, right_undist_image, conf):
 
     logger.info(f'Start to process depth with depth_min={depth_min}, depth_max={depth_max}, camera_height={camera_height}')
 
-    # slove depth and height
-    depth = solve_depth(mid_undist_image, right_undist_image, scale, output_folder,
-                        mid_mat_k, right_mat_k, mat_rt, camera_height, depth_min, depth_max)
+    if False:
+        # slove depth and height
+        depth = solve_depth(mid_undist_image, right_undist_image, scale, output_folder,
+                            mid_mat_k, right_mat_k, mat_rt, camera_height, depth_min, depth_max)
+        cv2.imencode('.exr', height)[1].tofile(f'{output_folder}/T_{name}_Displacement_{8//scale}K.exr')
+    else:
+        depth = np.ones([8192//scale, 8192//scale]) * camera_height
+        logger.warning('Depth module won\'t processed, use camera_height to get depth map instead.')
 
     height = depth_to_height(depth, camera_height, conf["height_map"]['scale_factor'])
-
-    cv2.imencode('.exr', height)[1].tofile(f'{output_folder}/T_{name}_Displacement_{8//scale}K.exr')
 
     return depth, height
 

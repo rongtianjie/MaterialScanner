@@ -11,5 +11,5 @@ if __name__ == "__main__":
         generate_grayboard(grayboard_path, "120", blur_size=21, max_sample_count=5)
 
     stereo.process(
-        r"D:\images\20220803stone\data",
-        r"D:\images\20220803stone\out", "120", scale=1, cache=True)
+        r"D:\images\20220728deshadow\data",
+        r"D:\images\20220728deshadow\out", "120", scale=2, cache=True)

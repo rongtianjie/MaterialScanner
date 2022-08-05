@@ -64,6 +64,8 @@ def produce_normal_map(mid_undist_image, depth, conf):
                 f'{output_dir}/reference/lightfield_{i}.png')
     
     mid_texture_image = mid_undist_image[:, 68*4//scale:-68*4//scale, 432*4//scale:-432*4//scale]
+
+    
     
     # slove normal without shadow
     normal, albedo_weight = solve_normal(mid_texture_image, lightfield_image, light_coord, pixel_coord, 0, rot_count, rot_count, light_num)

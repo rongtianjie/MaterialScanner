@@ -27,7 +27,7 @@ def produce_sss_map(conf):
         sss_image = read_folder(os.path.join(in_folder, "mid"), conf, start_id=rot_count*light_num*2, finish_id=rot_count*light_num*2+1, convert_to_gray=False, cache=cache)
         sss_image = sss_image[0]
     else:
-        logger.info("No sss image found.")
+        logger.warning("No sss image found.")
         return
 
     # solve sss

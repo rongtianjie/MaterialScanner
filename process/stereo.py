@@ -88,6 +88,7 @@ def process(inupt_path, output_path, lens, shoot_type="stereo", scale=1, cache=F
     del right_undist_gray_image
     
     # calculate normal
+    logger.info("Processing normal...")
     albedo_weight, albedo_weight_shadow, grayboard_image, g_wb = produce_normal_map(mid_undist_gray_image, depth, conf)
 
     # calculate AO

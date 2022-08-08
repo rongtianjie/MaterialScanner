@@ -93,7 +93,10 @@ def process(inupt_path, output_path, lens, shoot_type="stereo", scale=1, cache=F
 
     # calculate AO
     from func.texture_ao import produce_ao_map
-    produce_ao_map(height, conf)
+    if height is not None:
+        produce_ao_map(height, conf)
+    else:
+        logger.warning("No height map, skip AO map")
     del height
     
     # calculate albedo

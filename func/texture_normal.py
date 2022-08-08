@@ -4,6 +4,9 @@ import cv2
 from tqdm import trange
 import torch
 import torch.nn.functional as F
+from math import cos, pi
+import kornia
+from kmeans_pytorch import kmeans
 import os
 
 @count_time
@@ -65,18 +68,18 @@ def produce_normal_map(mid_undist_image, depth, conf):
     
     mid_texture_image = mid_undist_image[:, 68*4//scale:-68*4//scale, 432*4//scale:-432*4//scale]
 
-    # use weight
-    print(mid_texture_image.shape)
-    print(lightfield_image.shape)
-    b = mid_texture_image/65535/lightfield_image
-    print(b.shape)
-    b = b.transpose(1,2,0)
-    light_coord = light_coord.reshape(-1, 1, 3)
-    pixel_coord = np.expand_dims(pixel_coord.reshape(-1, 3), axis = 0).astype(np.float32)
-    light_dir = light_coord - pixel_coord
-    a = F.normalize(torch.FloatTensor(light_dir).transpose(0, 1), dim = -1).numpy()
-    np.savez(f'C:/Users/ecoplants/Desktop/data.npz', a = a, b = b)
-    logger.info('save data')
+    # # use weight
+    # print(mid_texture_image.shape)
+    # print(lightfield_image.shape)
+    # b = mid_texture_image/65535/lightfield_image
+    # print(b.shape)
+    # b = b.transpose(1,2,0)
+    # light_coord = light_coord.reshape(-1, 1, 3)
+    # pixel_coord = np.expand_dims(pixel_coord.reshape(-1, 3), axis = 0).astype(np.float32)
+    # light_dir = light_coord - pixel_coord
+    # a = F.normalize(torch.FloatTensor(light_dir).transpose(0, 1), dim = -1).numpy()
+    # np.savez(f'C:/Users/ecoplants/Desktop/data.npz', a = a, b = b)
+    # logger.info('save data')
     
     # slove normal without shadow
     normal, albedo_weight = solve_normal(mid_texture_image, lightfield_image, light_coord, pixel_coord, 0, rot_count, rot_count, light_num)
@@ -138,6 +141,9 @@ def produce_normal_map(mid_undist_image, depth, conf):
     # normal with shadow
     normal, albedo_weight_shadow = solve_normal(mid_texture_image, lightfield_image, light_coord, pixel_coord, 0, rot_count*light_num, rot_count, light_num)
 
+    # np.save(f'C:/Users/ecoplants/Desktop/normal.npy', normal)
+    # print(1)
+
     original_normal = normal / 2 + 0.5
     original_normal = original_normal * 65535
     original_normal = original_normal[..., ::-1]
@@ -145,6 +151,17 @@ def produce_normal_map(mid_undist_image, depth, conf):
     cv2.imencode('.png', original_normal)[1].tofile(f'{output_dir}/T_{name}_Normal_Shadow_Original_{8//scale}K.png')
 
     logger.info('Shadow normal solved.')
+
+    #########################
+    normal1, shadow1, mask = solve_normal_deshadow(mid_texture_image, lightfield_image, normal, light_coord, pixel_coord)
+    normal1 = normal1 / 2 + 0.5
+    normal1 = normal1 * 65535
+    normal1 = normal1[..., ::-1]
+    normal1 = normal1.astype(np.uint16)
+    cv2.imencode('.png', normal1)[1].tofile(
+        f'{output_dir}/T_{name}_Normal_New_{8//scale}K.png')
+    cv2.imencode('.png', shadow1)[1].tofile(f'{output_dir}/shadow_map_new_{8//scale}K.png')
+    cv2.imencode('.png', mask)[1].tofile(f'{output_dir}/shadow_mask_{8//scale}K.png')
 
     return albedo_weight, albedo_weight_shadow, grayboard_image, g_wb
 
@@ -183,8 +200,8 @@ def get_lightfield_from_grayboard(grayboard_image, gray_scale, light_coord, pixe
     # pixel_coord = np.expand_dims(pixel_coord, axis=0).astype(np.float32)
 
     lightfields = []
-    with trange(grayboard_image.shape[0]) as t:
-        t.set_description('Calculate lightfield: ')
+    with trange(54) as t:
+        t.set_description('Calculate lightfield')
         for i in t:
             pixel_coord = pixel_coord.astype(np.float32)
             line_diff = light_coord[i].reshape(1, 1, 3).astype(np.float32) - pixel_coord
@@ -231,33 +248,101 @@ def solve_normal(mid_img, gb_img, light_coord, pixel_coord, rank_start, rank_fin
     mid_img = mid_img.reshape(rot_count*light_num, -1)
     gb_img = gb_img.reshape(rot_count*light_num, -1)
 
+    with trange(batch_count) as t:
+        for i in t:
+            t.set_description(f'Solving batch [{i}]')
+            light_dir_batch = light_coord - pixel_coord[:, i*batch_size:(i+1)*batch_size, :]
+            tsr_a_batch = F.normalize(torch.FloatTensor(light_dir_batch).transpose(0, 1), dim = -1)
+            tsr_b_batch = torch.FloatTensor(mid_img[:, i*batch_size:(i+1)*batch_size]/65535/gb_img[:, i*batch_size:(i+1)*batch_size]).view(rot_count*light_num, -1).transpose(0, 1).unsqueeze(-1)
+            weight = torch.squeeze(tsr_b_batch)
+            rank = weight.sort(dim=1, descending = True)[1][:, rank_start:rank_finish]
+            idx = (rank + torch.arange(batch_size).view(-1, 1)*rot_count*light_num).reshape(-1)
 
-    for i in trange(batch_count):
-        light_dir_batch = light_coord - pixel_coord[:, i*batch_size:(i+1)*batch_size, :]
-        tsr_a_batch = F.normalize(torch.FloatTensor(light_dir_batch).transpose(0, 1), dim = -1)
-        tsr_b_batch = torch.FloatTensor(mid_img[:, i*batch_size:(i+1)*batch_size]/65535/gb_img[:, i*batch_size:(i+1)*batch_size]).view(rot_count*light_num, -1).transpose(0, 1).unsqueeze(-1)
-        weight = torch.squeeze(tsr_b_batch)
-        rank = weight.sort(dim=1, descending = True)[1][:, rank_start:rank_finish]
-        idx = (rank + torch.arange(batch_size).view(-1, 1)*rot_count*light_num).reshape(-1)
+            tsr_svd_a = tsr_a_batch.reshape(-1, 3)[idx].view(-1, svd_count, 3)
+            tsr_svd_b = tsr_b_batch.reshape(-1)[idx].view(-1, svd_count, 1)
 
-        tsr_svd_a = tsr_a_batch.reshape(-1, 3)[idx].view(-1, svd_count, 3)
-        tsr_svd_b = tsr_b_batch.reshape(-1)[idx].view(-1, svd_count, 1)
+            normal = torch.linalg.lstsq(tsr_svd_a, tsr_svd_b)[0]
+            normal = F.normalize(normal.squeeze_(), dim=-1)
+            normal_list.append(normal)
 
-        normal = torch.linalg.lstsq(tsr_svd_a, tsr_svd_b)[0]
-        normal = F.normalize(normal.squeeze_(), dim=-1)
-        normal_list.append(normal)
-
-        tsr_lightfield_batch = torch.FloatTensor(gb_img[:, i*batch_size:(i+1)*batch_size]).transpose(0, 1).unsqueeze(-1)
-        all_weight = 1/(tsr_a_batch.bmm(normal.unsqueeze(-1))*tsr_lightfield_batch).reshape(-1)
-        albedo_weight = torch.zeros_like(all_weight)
-        albedo_weight[idx] = all_weight[idx]
-        albedo_weight_list.append(albedo_weight.view(-1, rot_count*light_num))
+            tsr_lightfield_batch = torch.FloatTensor(gb_img[:, i*batch_size:(i+1)*batch_size]).transpose(0, 1).unsqueeze(-1)
+            all_weight = 1/(tsr_a_batch.bmm(normal.unsqueeze(-1))*tsr_lightfield_batch).reshape(-1)
+            albedo_weight = torch.zeros_like(all_weight)
+            albedo_weight[idx] = all_weight[idx]
+            albedo_weight_list.append(albedo_weight.view(-1, rot_count*light_num))
 
     tsr_normal = torch.stack(normal_list)
     tsr_normal = tsr_normal.view(img_width,-1,3)
     tsr_albedo_weight = torch.stack(albedo_weight_list)
     tsr_albedo_weight = tsr_albedo_weight.view(img_width,-1, rot_count*light_num).permute(2,0,1)
     return tsr_normal.numpy(), tsr_albedo_weight.numpy()
+
+def solve_normal_deshadow(mid_img, gb_img, shadow_normal, light_coord, pixel_coord):
+    img_width = shadow_normal.shape[0]
+    light_num = 54
+    batch_count = 16
+    batch_size = (img_width*img_width) // batch_count
+    normal_list = []
+    shadow_list = []
+    shadow_mask_list = []
+    tsr_w = []
+    light_coord = light_coord.reshape(-1, 1, 3)
+    pixel_coord = np.expand_dims(pixel_coord.reshape(-1, 3), axis = 0).astype(np.float32)
+    shadow_normal = shadow_normal.reshape(-1, 1, 3)
+    mid_img = mid_img.reshape(light_num, -1)
+    gb_img = gb_img.reshape(light_num, -1)
+
+    with trange(batch_count) as t:
+        for i in t:
+            t.set_description(f'Solving batch [{i}]')
+            light_dir_batch = (light_coord - pixel_coord[:, i*batch_size:(i+1)*batch_size, :])
+            tsr_a_batch = F.normalize(torch.FloatTensor(light_dir_batch).transpose(0, 1), dim = -1)
+            tsr_b_batch = torch.FloatTensor(mid_img[:, i*batch_size:(i+1)*batch_size]/65535/gb_img[:, i*batch_size:(i+1)*batch_size]).view(light_num, -1).transpose(0, 1)
+            shadow_normal_batch = torch.FloatTensor(shadow_normal[i*batch_size:(i+1)*batch_size])
+            tsr_w_batch = torch.cosine_similarity(tsr_a_batch, shadow_normal_batch, dim = -1).reshape(batch_size, -1)
+            tsr_w.append(tsr_w_batch.clone())
+            p=0.2
+            tsr_w_batch[tsr_w_batch <= p] = 0
+            tsr_w_batch[tsr_w_batch > p] = 1
+            shadow_batch = tsr_w_batch.sum(dim=-1)
+            shadow_mask = torch.zeros_like(shadow_batch)
+            shadow_mask[shadow_batch != light_num] = 1
+
+            # process shadow mask
+            shadow_mask = shadow_mask.reshape(1, 1, -1, img_width).to(torch.float32)
+            kernel = torch.ones((3, 3)).to(torch.float32)
+            for n in range(5):
+                shadow_mask = kornia.morphology.dilation(shadow_mask, kernel)
+            shadow_mask = shadow_mask.reshape(-1)
+
+            for p in trange(batch_size):
+                if shadow_mask[p] == 1:
+                    cluster_ids_x, cluster_centers = kmeans(
+                        X=tsr_b_batch[p].reshape(-1, 1), num_clusters=2, device=torch.device('cuda:0'), tqdm_flag=False, seed=0, iter_limit=300)
+                    if cluster_centers[0] > cluster_centers[1]:
+                        cluster_ids_x = 1 - cluster_ids_x
+                    tsr_w_batch[p] = cluster_ids_x.reshape(-1)
+
+
+            tsr_w_batch = tsr_w_batch.reshape(batch_size, -1, 1)
+            tsr_svd_a = tsr_a_batch.reshape(batch_size, -1, 3)*tsr_w_batch
+            tsr_svd_b = tsr_b_batch.reshape(batch_size, -1, 1)*tsr_w_batch
+
+            normal = torch.linalg.lstsq(tsr_svd_a, tsr_svd_b)[0]
+            normal = F.normalize(normal.squeeze_(), dim=-1)
+            normal_list.append(normal)
+            shadow_list.append(shadow_batch)
+            shadow_mask_list.append(shadow_mask)
+
+    tsr_normal = torch.stack(normal_list).view(img_width,-1,3)
+    tsr_shadow = torch.stack(shadow_list).view(img_width,-1)
+    w = torch.stack(tsr_w).view(img_width,-1,light_num).numpy()
+    # np.save(f'C:/Users/ecoplants/Desktop/w.npy', w)
+    tsr_shadow = (tsr_shadow/72)*255
+
+    tsr_shadow_mask = torch.stack(shadow_mask_list).view(img_width,-1)*255
+
+    return tsr_normal.numpy(), tsr_shadow.numpy().astype(np.uint8), tsr_shadow_mask.numpy().astype(np.uint8)
 
 
 def correct_normal(normal, depth, mat_k, scale, kernel_size, use_cuda = False):
@@ -292,6 +377,7 @@ def correct_normal(normal, depth, mat_k, scale, kernel_size, use_cuda = False):
     scale_factor = tsr_n.shape[0]//kernel_size
 
     with trange(20) as t:
+        t.set_description('Correcting normal')
         for i in t:
             optimizer.zero_grad()
             tsr_a_after = F.interpolate(tsr_a.permute(2,0,1).unsqueeze(0),scale_factor=scale_factor, mode='bilinear', align_corners =True).squeeze().permute(1,2,0)
@@ -320,34 +406,27 @@ def correct_normal(normal, depth, mat_k, scale, kernel_size, use_cuda = False):
 def euler_angles_to_matrix(euler_angles, convention):
     """
     Convert rotations given as Euler angles in radians to rotation matrices.
-
     Args:
         euler_angles: Euler angles in radians as tensor of shape (..., 3).
         convention: Convention string of three uppercase letters from
             {"X", "Y", and "Z"}.
-
     Returns:
         Rotation matrices as tensor of shape (..., 3, 3).
     """
-
     def _axis_angle_rotation(axis, angle):
         """
         Return the rotation matrices for one of the rotations about an axis
         of which Euler angles describe, for each value of the angle given.
-
         Args:
             axis: Axis label "X" or "Y or "Z".
             angle: any shape tensor of Euler angles in radians
-
         Returns:
             Rotation matrices as tensor of shape (..., 3, 3).
         """
-
         cos = torch.cos(angle)
         sin = torch.sin(angle)
         one = torch.ones_like(angle)
         zero = torch.zeros_like(angle)
-
         if axis == "X":
             R_flat = (one, zero, zero, zero, cos, -sin, zero, sin, cos)
         elif axis == "Y":
@@ -356,9 +435,7 @@ def euler_angles_to_matrix(euler_angles, convention):
             R_flat = (cos, -sin, zero, sin, cos, zero, zero, zero, one)
         else:
             raise ValueError("letter must be either X, Y or Z.")
-
         return torch.stack(R_flat, -1).reshape(angle.shape + (3, 3))
-
     if euler_angles.dim() == 0 or euler_angles.shape[-1] != 3:
         raise ValueError("Invalid input euler angles.")
     if len(convention) != 3:

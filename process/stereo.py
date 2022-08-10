@@ -81,7 +81,12 @@ def process(inupt_path, output_path, lens, shoot_type="stereo", scale=1, cache=F
     
     # calculate stereo depth
     mid_undist_gray_image = read_folder(os.path.join(inupt_path, "mid"), conf, start_id=0, finish_id=rot_count*light_num, convert_to_gray=True, cache=cache)
-    right_undist_gray_image = read_folder(os.path.join(inupt_path, "right"), conf, start_id=0, finish_id=rot_count*light_num, convert_to_gray=True, cache=cache)
+    
+    try:
+        right_undist_gray_image = read_folder(os.path.join(inupt_path, "right"), conf, start_id=0, finish_id=rot_count*light_num, convert_to_gray=True, cache=cache)
+    except:
+        right_undist_gray_image = None
+        logger.warning("right image not found")
 
     depth, height = produce_height_map(mid_undist_gray_image, right_undist_gray_image, conf)
     

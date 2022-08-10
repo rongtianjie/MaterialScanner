@@ -10,6 +10,10 @@ def produce_roughness_map(mid_undist_image, specular_image, roughness_albedo, gr
     out_folder = conf["output_folder"]
     scale = conf["scale"]
     name = conf["name"]
+    rot_count = conf["geometry"]['rot_count']
+    light_num = len(conf["geometry"]['light_str'])//2
+
+    grayboard_image = grayboard_image[:rot_count*light_num]
 
     roughness = solve_roughness(
         mid_undist_image[:, 68*4//scale:-68*4//scale, 432*4//scale:-432*4//scale], 

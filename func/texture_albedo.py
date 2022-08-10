@@ -15,6 +15,8 @@ def produce_albedo_map(mid_undist_image, g_wb, albedo_weight, albedo_weight_shad
     light_num = len(conf["geometry"]['light_str'])//2
     gray_scale = conf["grayboard"]["gray_scale"]
 
+    grayboard_image = grayboard_image[:rot_count*light_num]
+
     b_weight = g_wb[0]/g_wb[0]*0.114+g_wb[1]/g_wb[0]*0.587+g_wb[2]/g_wb[0]*0.299
     g_weight = g_wb[0]/g_wb[1]*0.114+g_wb[1]/g_wb[1]*0.587+g_wb[2]/g_wb[1]*0.299
     r_weight = g_wb[0]/g_wb[2]*0.114+g_wb[1]/g_wb[2]*0.587+g_wb[2]/g_wb[2]*0.299

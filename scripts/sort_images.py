@@ -3,14 +3,14 @@
 from tqdm import trange, tqdm
 import shutil
 from glob import glob
+import os
 
-
-path = 'Z:/双目/20220804旋转光源老虎/'
+path = r'Z:\双目\20220808旋转光源拍摄瓷砖\cizhuanxiao'
 start = 0
 rot = 8
 
-for cam in ['mid/', 'side/']:
-    fl = sorted(glob(path + 'ori/' + cam + '*.RAF'))[start : start+rot*16]
+for cam in ['mid', 'side']:
+    fl = sorted(glob(os.path.join(path, 'ori', cam, '*.RAF')))[start : start+rot*16]
     grid = [[i,j] for i in range(rot) for j in range(16)]
     for i, j in tqdm(grid):
         idx_list = [rot+i+1, rot*3+i+1, rot*5+i+1, rot*7+i+1, i+1, rot*2+i+1, rot*4+i+1, rot*6+i+1]
@@ -24,5 +24,5 @@ for cam in ['mid/', 'side/']:
             idx_list[j] = str(idx_list[j])
 
         f_in = fl[i*16+j]
-        f_out = path+cam+'MS'+idx_list[j]+'.RAF'
+        f_out = os.path.join(path, cam, 'MS'+idx_list[j]+'.RAF')
         shutil.copy(f_in, f_out)  

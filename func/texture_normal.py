@@ -80,9 +80,21 @@ def produce_normal_map(mid_undist_image, depth, conf):
     # a = F.normalize(torch.FloatTensor(light_dir).transpose(0, 1), dim = -1).numpy()
     # np.savez(f'C:/Users/ecoplants/Desktop/data.npz', a = a, b = b)
     # logger.info('save data')
+
+    #########################
+    normal1, shadow1 = solve_normal_deshadow(mid_texture_image, lightfield_image, light_coord, pixel_coord)
+    normal1 = normal1 / 2 + 0.5
+    normal1 = normal1 * 65535
+    normal1 = normal1[..., ::-1]
+    normal1 = normal1.astype(np.uint16)
+    cv2.imencode('.png', normal1)[1].tofile(
+        f'{output_dir}/T_{name}_Normal_New_{8//scale}K.png')
+    cv2.imencode('.png', shadow1)[1].tofile(f'{output_dir}/shadow_map_new_{8//scale}K.png')
+
+    exit(1)
     
     # slove normal without shadow
-    normal, albedo_weight = solve_normal(mid_texture_image, lightfield_image, light_coord, pixel_coord, 0, rot_count, rot_count, light_num)
+    normal, albedo_weight = solve_normal(mid_texture_image, lightfield_image, light_coord, pixel_coord, 8, 24, rot_count, light_num)
 
     original_normal = normal / 2 + 0.5
     original_normal = original_normal * 65535
@@ -139,7 +151,7 @@ def produce_normal_map(mid_undist_image, depth, conf):
         f'{output_dir}/reference/Normal_Plain_Shift_Loss_V_{8//scale}K.png')
 
     # normal with shadow
-    normal, albedo_weight_shadow = solve_normal(mid_texture_image, lightfield_image, light_coord, pixel_coord, 0, rot_count*light_num, rot_count, light_num)
+    normal, albedo_weight_shadow = solve_normal(mid_texture_image, lightfield_image, light_coord, pixel_coord, 4, rot_count*light_num, rot_count, light_num)
 
     # np.save(f'C:/Users/ecoplants/Desktop/normal.npy', normal)
     # print(1)
@@ -151,17 +163,6 @@ def produce_normal_map(mid_undist_image, depth, conf):
     cv2.imencode('.png', original_normal)[1].tofile(f'{output_dir}/T_{name}_Normal_Shadow_Original_{8//scale}K.png')
 
     logger.info('Shadow normal solved.')
-
-    #########################
-    normal1, shadow1, mask = solve_normal_deshadow(mid_texture_image, lightfield_image, normal, light_coord, pixel_coord)
-    normal1 = normal1 / 2 + 0.5
-    normal1 = normal1 * 65535
-    normal1 = normal1[..., ::-1]
-    normal1 = normal1.astype(np.uint16)
-    cv2.imencode('.png', normal1)[1].tofile(
-        f'{output_dir}/T_{name}_Normal_New_{8//scale}K.png')
-    cv2.imencode('.png', shadow1)[1].tofile(f'{output_dir}/shadow_map_new_{8//scale}K.png')
-    cv2.imencode('.png', mask)[1].tofile(f'{output_dir}/shadow_mask_{8//scale}K.png')
 
     return albedo_weight, albedo_weight_shadow, grayboard_image, g_wb
 
@@ -200,7 +201,7 @@ def get_lightfield_from_grayboard(grayboard_image, gray_scale, light_coord, pixe
     # pixel_coord = np.expand_dims(pixel_coord, axis=0).astype(np.float32)
 
     lightfields = []
-    with trange(54) as t:
+    with trange(light_coord.shape[0]) as t:
         t.set_description('Calculate lightfield')
         for i in t:
             pixel_coord = pixel_coord.astype(np.float32)
@@ -277,72 +278,57 @@ def solve_normal(mid_img, gb_img, light_coord, pixel_coord, rank_start, rank_fin
     tsr_albedo_weight = tsr_albedo_weight.view(img_width,-1, rot_count*light_num).permute(2,0,1)
     return tsr_normal.numpy(), tsr_albedo_weight.numpy()
 
-def solve_normal_deshadow(mid_img, gb_img, shadow_normal, light_coord, pixel_coord):
-    img_width = shadow_normal.shape[0]
-    light_num = 54
+def solve_normal_deshadow(mid_img, gb_img, light_coord, pixel_coord):
+    img_width = mid_img.shape[1]
     batch_count = 16
+    light_num = 54
     batch_size = (img_width*img_width) // batch_count
     normal_list = []
     shadow_list = []
-    shadow_mask_list = []
-    tsr_w = []
+
     light_coord = light_coord.reshape(-1, 1, 3)
     pixel_coord = np.expand_dims(pixel_coord.reshape(-1, 3), axis = 0).astype(np.float32)
-    shadow_normal = shadow_normal.reshape(-1, 1, 3)
     mid_img = mid_img.reshape(light_num, -1)
     gb_img = gb_img.reshape(light_num, -1)
 
-    with trange(batch_count) as t:
-        for i in t:
-            t.set_description(f'Solving batch [{i}]')
-            light_dir_batch = (light_coord - pixel_coord[:, i*batch_size:(i+1)*batch_size, :])
-            tsr_a_batch = F.normalize(torch.FloatTensor(light_dir_batch).transpose(0, 1), dim = -1)
-            tsr_b_batch = torch.FloatTensor(mid_img[:, i*batch_size:(i+1)*batch_size]/65535/gb_img[:, i*batch_size:(i+1)*batch_size]).view(light_num, -1).transpose(0, 1)
-            shadow_normal_batch = torch.FloatTensor(shadow_normal[i*batch_size:(i+1)*batch_size])
-            tsr_w_batch = torch.cosine_similarity(tsr_a_batch, shadow_normal_batch, dim = -1).reshape(batch_size, -1)
-            tsr_w.append(tsr_w_batch.clone())
-            p=0.2
-            tsr_w_batch[tsr_w_batch <= p] = 0
-            tsr_w_batch[tsr_w_batch > p] = 1
-            shadow_batch = tsr_w_batch.sum(dim=-1)
-            shadow_mask = torch.zeros_like(shadow_batch)
-            shadow_mask[shadow_batch != light_num] = 1
+    for i in trange(batch_count):
+        light_dir_batch = light_coord - pixel_coord[:, i*batch_size:(i+1)*batch_size, :]
+        tsr_a_batch = F.normalize(torch.FloatTensor(light_dir_batch).transpose(0, 1), dim = -1)
+        tsr_b_batch = torch.FloatTensor(mid_img[:, i*batch_size:(i+1)*batch_size]/65535/gb_img[:, i*batch_size:(i+1)*batch_size]).view(light_num, -1).transpose(0, 1)
+    
+        tsr_w_batch = torch.ones_like(tsr_b_batch)
+        sorted_batch, sorted_idx = tsr_b_batch.sort(dim=1, descending=True)
+        diff = torch.diff(sorted_batch, dim=1)[:, 20:].abs()
+        sorted_diff, sorted_diff_idx = diff.sort(dim=1, descending=True)
+        sorted_diff_idx += 20
+        sorted_diff_mean = torch.mean(sorted_diff[:, 38:], dim=1)
 
-            # process shadow mask
-            shadow_mask = shadow_mask.reshape(1, 1, -1, img_width).to(torch.float32)
-            kernel = torch.ones((3, 3)).to(torch.float32)
-            for n in range(5):
-                shadow_mask = kornia.morphology.dilation(shadow_mask, kernel)
-            shadow_mask = shadow_mask.reshape(-1)
+        for p in trange(tsr_w_batch.shape[0]):
+            tsr_w_batch[p, sorted_idx[p, :4]] = 0
 
-            for p in trange(batch_size):
-                if shadow_mask[p] == 1:
-                    cluster_ids_x, cluster_centers = kmeans(
-                        X=tsr_b_batch[p].reshape(-1, 1), num_clusters=2, device=torch.device('cuda:0'), tqdm_flag=False, seed=0, iter_limit=300)
-                    if cluster_centers[0] > cluster_centers[1]:
-                        cluster_ids_x = 1 - cluster_ids_x
-                    tsr_w_batch[p] = cluster_ids_x.reshape(-1)
+            if sorted_diff[p, 0] > sorted_diff_mean[p]*5:
+                diff_idx = sorted_diff_idx[p, 0]
+                tsr_w_batch[p, sorted_idx[p, diff_idx:]] = 0
 
 
-            tsr_w_batch = tsr_w_batch.reshape(batch_size, -1, 1)
-            tsr_svd_a = tsr_a_batch.reshape(batch_size, -1, 3)*tsr_w_batch
-            tsr_svd_b = tsr_b_batch.reshape(batch_size, -1, 1)*tsr_w_batch
+        shadow_batch = tsr_w_batch.sum(dim=1)
 
-            normal = torch.linalg.lstsq(tsr_svd_a, tsr_svd_b)[0]
-            normal = F.normalize(normal.squeeze_(), dim=-1)
-            normal_list.append(normal)
-            shadow_list.append(shadow_batch)
-            shadow_mask_list.append(shadow_mask)
+        tsr_w_batch = tsr_w_batch.reshape(batch_size, -1, 1)
+        tsr_svd_a = tsr_a_batch.reshape(batch_size, -1, 3)*tsr_w_batch
+        tsr_svd_b = tsr_b_batch.reshape(batch_size, -1, 1)*tsr_w_batch
+
+        normal = torch.linalg.lstsq(tsr_svd_a, tsr_svd_b)[0]
+        normal = F.normalize(normal.squeeze_(), dim=-1)
+        normal_list.append(normal)
+
+        shadow_list.append(shadow_batch)
+
 
     tsr_normal = torch.stack(normal_list).view(img_width,-1,3)
+
     tsr_shadow = torch.stack(shadow_list).view(img_width,-1)
-    w = torch.stack(tsr_w).view(img_width,-1,light_num).numpy()
-    # np.save(f'C:/Users/ecoplants/Desktop/w.npy', w)
-    tsr_shadow = (tsr_shadow/72)*255
-
-    tsr_shadow_mask = torch.stack(shadow_mask_list).view(img_width,-1)*255
-
-    return tsr_normal.numpy(), tsr_shadow.numpy().astype(np.uint8), tsr_shadow_mask.numpy().astype(np.uint8)
+    tsr_shadow = (tsr_shadow/54)*255
+    return tsr_normal.numpy(), tsr_shadow.numpy().astype(np.uint8)
 
 
 def correct_normal(normal, depth, mat_k, scale, kernel_size, use_cuda = False):

@@ -27,7 +27,7 @@ pipreqs . --encoding=utf8 --force
 双击 `run.cmd` ，运行前将会检查运行环境，如果缺失，则会从网盘（10.0.0.3，需要电脑能访问）上自动拷贝依赖文件（exe、dll、预置数据等），运行的是 `example.py` 文件。
 
 - 命令行
-`stereo_main.py` 文件为命令行封装，参数如下：
+`main.py` 文件为命令行封装，参数如下：
     + -i 输入文件夹路径
     + -o 输出文件夹路径
     + -l 镜头参数，选项为{30， 50， 120}
@@ -37,7 +37,7 @@ pipreqs . --encoding=utf8 --force
 ### 打包
 ***
 
-双击 `package.cmd` ，将使用 `pyinstaller` 打包 `stereo_main.py` 文件为exe程序，供前台界面调用。
+双击 `package.cmd` ，将使用 `pyinstaller` 打包 `main.py` 文件为exe程序，供前台界面调用。
 
 ### 代码结构简介
 ***
@@ -56,7 +56,7 @@ pipreqs . --encoding=utf8 --force
 * process `流程调度文件目录`
     + stereo.py `当前的双目解算流程`
 * scripts `工具脚本目录`
-* stereo_main.py `命令行封装`
+* main.py `命令行封装`
 * example.py `本地测试代码`
 * run.cmd `运行本地测试代码命令，加入了运行前依赖检查`
 * package.cmd `打包命令`

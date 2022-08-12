@@ -1,14 +1,18 @@
 import argparse
 import sys
-from process import stereo
+from process.stereo import process_stereo
+from process.mono import process_mono
 import multiprocessing
 
 
 def parse(inupt_path, output_path, lens, shoot_type="stereo", scale=1, cache=False):
     try:
-        stereo.process(inupt_path, output_path, lens, shoot_type, scale, cache)
+        if shoot_type == "stereo":
+            process_stereo(inupt_path, output_path, lens, scale, cache)
+        elif shoot_type == "mono":
+            process_mono(inupt_path, output_path, lens, scale, cache)
     except Exception as e:
-        print("error: ", e)
+        print("Error: ", e)
         return -1
 
     print("end")

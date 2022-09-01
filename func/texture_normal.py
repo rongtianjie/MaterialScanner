@@ -4,9 +4,6 @@ import cv2
 from tqdm import trange
 import torch
 import torch.nn.functional as F
-from math import cos, pi
-import kornia
-from kmeans_pytorch import kmeans
 import os
 
 @count_time
@@ -19,13 +16,12 @@ def produce_normal_map(mid_undist_image, depth, conf):
     camera_height = conf["geometry"]["camera_height"]
     grayboard_height = conf["geometry"]["grayboard_height"]
     rot_count = conf["geometry"]['rot_count']
-    light_num = len(conf["geometry"]['light_str'])//2
+    light_num = len(conf["geometry"]['light_str'])//2 * rot_count
     mid_mat_k = conf["camera_matrices"]["mid_mat_k"]
     mid_mat_dist = conf["camera_matrices"]["mid_mat_d"]
     gray_scale = conf["grayboard"]["gray_scale"]
     kernel_size = conf["normal_map"]["filter_original_size"]
     grayboard_data_path = conf["grayboard_data_path"]
-
 
     # test calculate camera height
     if False:
@@ -47,7 +43,7 @@ def produce_normal_map(mid_undist_image, depth, conf):
 
     # calculate light field
     plain_depth = np.ones([8192//scale, 8192//scale]) * camera_height
-    light_coord = get_light_coord(conf["geometry"])[:rot_count*light_num]
+    light_coord = get_light_coord(conf["geometry"])[:light_num]
     pixel_coord = get_pixel_coord(mid_mat_k, camera_height, plain_depth, scale)
 
     grayboard_image = grayboard_data['data']
@@ -55,46 +51,26 @@ def produce_normal_map(mid_undist_image, depth, conf):
     if scale != 1:
         grayboard_image = cv2.resize(grayboard_image.transpose(1, 2, 0),
                     (grayboard_image.shape[2]//scale, grayboard_image.shape[1]//scale)).transpose(2, 0, 1)
-    # grayboard_image = np.array([cv2.undistort(grayboard_image[_], mid_mat_k, mid_mat_dist, mid_mat_k) for _ in trange(rot_count*light_num)])
 
     lightfield_image = get_lightfield_from_grayboard(
                 grayboard_image, gray_scale, light_coord, pixel_coord,
                 mid_mat_k, camera_height, grayboard_depth, scale)
 
     if False:
-        for i in range(rot_count*light_num):
+        for i in range(light_num):
             cv2.imencode('.png', (lightfield_image[i]*65535).astype(np.uint16))[1].tofile(
                 f'{output_dir}/reference/lightfield_{i}.png')
     
     mid_texture_image = mid_undist_image[:, 68*4//scale:-68*4//scale, 432*4//scale:-432*4//scale]
-
-    # # use weight
-    # print(mid_texture_image.shape)
-    # print(lightfield_image.shape)
-    # b = mid_texture_image/65535/lightfield_image
-    # print(b.shape)
-    # b = b.transpose(1,2,0)
-    # light_coord = light_coord.reshape(-1, 1, 3)
-    # pixel_coord = np.expand_dims(pixel_coord.reshape(-1, 3), axis = 0).astype(np.float32)
-    # light_dir = light_coord - pixel_coord
-    # a = F.normalize(torch.FloatTensor(light_dir).transpose(0, 1), dim = -1).numpy()
-    # np.savez(f'C:/Users/ecoplants/Desktop/data.npz', a = a, b = b)
-    # logger.info('save data')
-
-    #########################
-    normal1, shadow1 = solve_normal_deshadow(mid_texture_image, lightfield_image, light_coord, pixel_coord)
-    normal1 = normal1 / 2 + 0.5
-    normal1 = normal1 * 65535
-    normal1 = normal1[..., ::-1]
-    normal1 = normal1.astype(np.uint16)
-    cv2.imencode('.png', normal1)[1].tofile(
-        f'{output_dir}/T_{name}_Normal_New_{8//scale}K.png')
-    cv2.imencode('.png', shadow1)[1].tofile(f'{output_dir}/shadow_map_new_{8//scale}K.png')
-
-    exit(1)
+    
+    # temportary remove the last round of light
+    mid_texture_image = mid_texture_image[:48]
+    lightfield_image = lightfield_image[:48]
+    light_coord = light_coord[:48]
+    print(mid_texture_image.shape, lightfield_image.shape, light_coord.shape)
     
     # slove normal without shadow
-    normal, albedo_weight = solve_normal(mid_texture_image, lightfield_image, light_coord, pixel_coord, 8, 24, rot_count, light_num)
+    normal, albedo_weight = solve_normal(mid_texture_image, lightfield_image, light_coord, pixel_coord, 2, int(mid_texture_image.shape[0]*0.4))
 
     original_normal = normal / 2 + 0.5
     original_normal = original_normal * 65535
@@ -151,10 +127,7 @@ def produce_normal_map(mid_undist_image, depth, conf):
         f'{output_dir}/reference/Normal_Plain_Shift_Loss_V_{8//scale}K.png')
 
     # normal with shadow
-    normal, albedo_weight_shadow = solve_normal(mid_texture_image, lightfield_image, light_coord, pixel_coord, 4, rot_count*light_num, rot_count, light_num)
-
-    # np.save(f'C:/Users/ecoplants/Desktop/normal.npy', normal)
-    # print(1)
+    normal, albedo_weight_shadow = solve_normal(mid_texture_image, lightfield_image, light_coord, pixel_coord, 0, mid_texture_image.shape[0])
 
     original_normal = normal / 2 + 0.5
     original_normal = original_normal * 65535
@@ -199,7 +172,6 @@ def get_pixel_coord(mat_k, camera_height, depth, scale):
 def get_lightfield_from_grayboard(grayboard_image, gray_scale, light_coord, pixel_coord, mat_k, camera_height, grayboard_depth, scale):
     z_coord = (camera_height - grayboard_depth)
     # pixel_coord = np.expand_dims(pixel_coord, axis=0).astype(np.float32)
-
     lightfields = []
     with trange(light_coord.shape[0]) as t:
         t.set_description('Calculate lightfield')
@@ -236,7 +208,9 @@ def get_lightfield_from_grayboard(grayboard_image, gray_scale, light_coord, pixe
 
 
 @torch.no_grad()
-def solve_normal(mid_img, gb_img, light_coord, pixel_coord, rank_start, rank_finish, rot_count, light_num):
+def solve_normal(mid_img, gb_img, light_coord, pixel_coord, rank_start, rank_finish):
+    light_num = light_coord.shape[0]
+    logger.info(f'Solve normal for {light_num} lights.')
     img_width = mid_img.shape[1]
     batch_count = 16
     batch_size = (img_width*img_width) // batch_count
@@ -246,18 +220,18 @@ def solve_normal(mid_img, gb_img, light_coord, pixel_coord, rank_start, rank_fin
 
     light_coord = light_coord.reshape(-1, 1, 3)
     pixel_coord = np.expand_dims(pixel_coord.reshape(-1, 3), axis = 0).astype(np.float32)
-    mid_img = mid_img.reshape(rot_count*light_num, -1)
-    gb_img = gb_img.reshape(rot_count*light_num, -1)
+    mid_img = mid_img.reshape(light_num, -1)
+    gb_img = gb_img.reshape(light_num, -1)
 
     with trange(batch_count) as t:
         for i in t:
-            t.set_description(f'Solving batch [{i}]')
+            t.set_description(f'Solving normal batch [{i}]')
             light_dir_batch = light_coord - pixel_coord[:, i*batch_size:(i+1)*batch_size, :]
             tsr_a_batch = F.normalize(torch.FloatTensor(light_dir_batch).transpose(0, 1), dim = -1)
-            tsr_b_batch = torch.FloatTensor(mid_img[:, i*batch_size:(i+1)*batch_size]/65535/gb_img[:, i*batch_size:(i+1)*batch_size]).view(rot_count*light_num, -1).transpose(0, 1).unsqueeze(-1)
+            tsr_b_batch = torch.FloatTensor(mid_img[:, i*batch_size:(i+1)*batch_size]/65535/gb_img[:, i*batch_size:(i+1)*batch_size]).view(light_num, -1).transpose(0, 1).unsqueeze(-1)
             weight = torch.squeeze(tsr_b_batch)
             rank = weight.sort(dim=1, descending = True)[1][:, rank_start:rank_finish]
-            idx = (rank + torch.arange(batch_size).view(-1, 1)*rot_count*light_num).reshape(-1)
+            idx = (rank + torch.arange(batch_size).view(-1, 1)*light_num).reshape(-1)
 
             tsr_svd_a = tsr_a_batch.reshape(-1, 3)[idx].view(-1, svd_count, 3)
             tsr_svd_b = tsr_b_batch.reshape(-1)[idx].view(-1, svd_count, 1)
@@ -270,65 +244,13 @@ def solve_normal(mid_img, gb_img, light_coord, pixel_coord, rank_start, rank_fin
             all_weight = 1/(tsr_a_batch.bmm(normal.unsqueeze(-1))*tsr_lightfield_batch).reshape(-1)
             albedo_weight = torch.zeros_like(all_weight)
             albedo_weight[idx] = all_weight[idx]
-            albedo_weight_list.append(albedo_weight.view(-1, rot_count*light_num))
+            albedo_weight_list.append(albedo_weight.view(-1, light_num))
 
     tsr_normal = torch.stack(normal_list)
     tsr_normal = tsr_normal.view(img_width,-1,3)
     tsr_albedo_weight = torch.stack(albedo_weight_list)
-    tsr_albedo_weight = tsr_albedo_weight.view(img_width,-1, rot_count*light_num).permute(2,0,1)
+    tsr_albedo_weight = tsr_albedo_weight.view(img_width,-1, light_num).permute(2,0,1)
     return tsr_normal.numpy(), tsr_albedo_weight.numpy()
-
-def solve_normal_deshadow(mid_img, gb_img, light_coord, pixel_coord):
-    img_width = mid_img.shape[1]
-    batch_count = 16
-    light_num = 54
-    batch_size = (img_width*img_width) // batch_count
-    normal_list = []
-    shadow_list = []
-
-    light_coord = light_coord.reshape(-1, 1, 3)
-    pixel_coord = np.expand_dims(pixel_coord.reshape(-1, 3), axis = 0).astype(np.float32)
-    mid_img = mid_img.reshape(light_num, -1)
-    gb_img = gb_img.reshape(light_num, -1)
-
-    for i in trange(batch_count):
-        light_dir_batch = light_coord - pixel_coord[:, i*batch_size:(i+1)*batch_size, :]
-        tsr_a_batch = F.normalize(torch.FloatTensor(light_dir_batch).transpose(0, 1), dim = -1)
-        tsr_b_batch = torch.FloatTensor(mid_img[:, i*batch_size:(i+1)*batch_size]/65535/gb_img[:, i*batch_size:(i+1)*batch_size]).view(light_num, -1).transpose(0, 1)
-    
-        tsr_w_batch = torch.ones_like(tsr_b_batch)
-        sorted_batch, sorted_idx = tsr_b_batch.sort(dim=1, descending=True)
-        diff = torch.diff(sorted_batch, dim=1)[:, 20:].abs()
-        sorted_diff, sorted_diff_idx = diff.sort(dim=1, descending=True)
-        sorted_diff_idx += 20
-        sorted_diff_mean = torch.mean(sorted_diff[:, 38:], dim=1)
-
-        for p in trange(tsr_w_batch.shape[0]):
-            tsr_w_batch[p, sorted_idx[p, :4]] = 0
-
-            if sorted_diff[p, 0] > sorted_diff_mean[p]*5:
-                diff_idx = sorted_diff_idx[p, 0]
-                tsr_w_batch[p, sorted_idx[p, diff_idx:]] = 0
-
-
-        shadow_batch = tsr_w_batch.sum(dim=1)
-
-        tsr_w_batch = tsr_w_batch.reshape(batch_size, -1, 1)
-        tsr_svd_a = tsr_a_batch.reshape(batch_size, -1, 3)*tsr_w_batch
-        tsr_svd_b = tsr_b_batch.reshape(batch_size, -1, 1)*tsr_w_batch
-
-        normal = torch.linalg.lstsq(tsr_svd_a, tsr_svd_b)[0]
-        normal = F.normalize(normal.squeeze_(), dim=-1)
-        normal_list.append(normal)
-
-        shadow_list.append(shadow_batch)
-
-
-    tsr_normal = torch.stack(normal_list).view(img_width,-1,3)
-
-    tsr_shadow = torch.stack(shadow_list).view(img_width,-1)
-    tsr_shadow = (tsr_shadow/54)*255
-    return tsr_normal.numpy(), tsr_shadow.numpy().astype(np.uint8)
 
 
 def correct_normal(normal, depth, mat_k, scale, kernel_size, use_cuda = False):

@@ -11,9 +11,9 @@ def produce_roughness_map(mid_undist_image, specular_image, roughness_albedo, gr
     scale = conf["scale"]
     name = conf["name"]
     rot_count = conf["geometry"]['rot_count']
-    light_num = len(conf["geometry"]['light_str'])//2
+    light_num = len(conf["geometry"]['light_str'])//2 * rot_count
 
-    grayboard_image = grayboard_image[:rot_count*light_num]
+    grayboard_image = grayboard_image[:light_num]
 
     roughness = solve_roughness(
         mid_undist_image[:, 68*4//scale:-68*4//scale, 432*4//scale:-432*4//scale], 
@@ -24,7 +24,7 @@ def produce_roughness_map(mid_undist_image, specular_image, roughness_albedo, gr
     roughness = solve_roughness(
         mid_undist_image[:, 68*4//scale:-68*4//scale,432*4//scale:-432*4//scale],
         specular_image[:, 68*4//scale:-68*4//scale, 432*4//scale:-432*4//scale], 
-        best_2 = True)
+        best_k = 2)
     roughness = (roughness * 65535).astype(np.uint16)
     cv2.imencode('.png', roughness)[1].tofile(f'{out_folder}/T_{name}_Roughness_2_{8//scale}K.png')
 
@@ -40,10 +40,10 @@ def produce_roughness_map(mid_undist_image, specular_image, roughness_albedo, gr
     roughness = (roughness * 65535).astype(np.uint16)
     cv2.imencode('.png', roughness)[1].tofile(f'{out_folder}/T_{name}_Roughness_REF_{8//scale}K.png')
 
-def solve_roughness(diffuse_img, specular_img, best_2 = False):
+def solve_roughness(diffuse_img, specular_img, best_k = -1):
     roughness = (torch.FloatTensor(specular_img/65535) - torch.FloatTensor(diffuse_img/65535)).abs_()
-    if best_2:
-        roughness = torch.topk(roughness, 2, largest=False, dim=0)[0]
+    if best_k > 0:
+        roughness = torch.topk(roughness, best_k, largest=False, dim=0)[0]
     roughness = torch.mean(roughness, 0)
     roughness = roughness / torch.max(roughness)
     roughness[roughness > 1] = 1

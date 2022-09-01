@@ -15,7 +15,7 @@ def produce_sss_map(conf):
     name = conf["name"]
     gain = conf["sss_map"]["gain"]
     rot_count = conf["geometry"]['rot_count']
-    light_num = len(conf["geometry"]['light_str'])//2
+    light_num = len(conf["geometry"]['light_str'])//2 * rot_count
 
     # check img count
     img_list = []
@@ -23,8 +23,8 @@ def produce_sss_map(conf):
         if filename.lower().endswith(".raf"):
             img_list.append(filename)
     
-    if len(img_list) > rot_count*light_num*2:
-        sss_image = read_folder(os.path.join(in_folder, "mid"), conf, start_id=rot_count*light_num*2, finish_id=rot_count*light_num*2+1, convert_to_gray=False, cache=cache)
+    if len(img_list) > light_num*2:
+        sss_image = read_folder(os.path.join(in_folder, "mid"), conf, start_id=light_num*2, finish_id=light_num*2+1, convert_to_gray=False, cache=cache)
         sss_image = sss_image[0]
     else:
         logger.warning("No sss image found.")

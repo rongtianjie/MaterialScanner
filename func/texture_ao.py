@@ -2,8 +2,16 @@ from base.common import *
 import taichi as ti
 import numpy as np
 import cv2
+import torch
 
-ti.init(arch=ti.cuda, device_memory_fraction=0.8)
+# if gpu memory larger than 20G, use CUDA to init taichi
+if torch.cuda.is_available() and torch.cuda.mem_get_info(device=torch.device('cuda:0'))[0] > 21474836480:
+    ti.init(arch=ti.cuda)
+    logger.info("Use CUDA to init taichi")
+else:
+    ti.init(arch=ti.cpu)
+    logger.info("Use CPU to init taichi")
+
 
 
 @count_time

@@ -10,114 +10,81 @@ from func.texture_normal import produce_normal_map
 from func.texture_albedo import produce_albedo_map
 from func.texture_roughness import produce_roughness_map
 from func.texture_sss import produce_sss_map
-import numpy as np
-import json
+from base.config_handler import read_conf
+from process.mono import process_mono
 
-
-def read_conf(lens, scale=1):
-    if lens == "30":
-        conf_path = "conf/fuji_30.json"
-        grayboard_data_path = "pre_data/grayboard_result_30.npz"
-    if lens == "50":
-        conf_path = "conf/fuji_50.json"
-        grayboard_data_path = "pre_data/grayboard_result_50.npz"
-    elif lens == "120":
-        conf_path = "conf/fuji_120.json"
-        grayboard_data_path = "pre_data/grayboard_result_120.npz"
-
-    with open(conf_path) as f:
-        raw = f.read()
-    conf = json.loads(raw)
-
-    camera_matrices = conf["camera_matrices"]
-    # convert matrices
-    mid_mat_k = np.array(camera_matrices['mid_mat_k']).reshape(3, 3)
-    mid_mat_dist = np.array(camera_matrices['mid_mat_d']).reshape(5, 1)
-    right_mat_k = np.array(camera_matrices['side_mat_k']).reshape(3, 3)
-    right_mat_dist = np.array(camera_matrices['side_mat_d']).reshape(5, 1)
-    mat_rt = np.array(camera_matrices['mat_rt']).reshape(4, 4)
-
-    mid_mat_k[:2] *= camera_matrices['matrices_scale']
-    right_mat_k[:2] *= camera_matrices['matrices_scale']
-
-    mid_mat_k[:2] /= scale
-    right_mat_k[:2] /= scale
-
-    matrices_np = {}
-    matrices_np['mid_mat_k'] = mid_mat_k
-    matrices_np['mid_mat_d'] = mid_mat_dist
-    matrices_np['side_mat_k'] = right_mat_k
-    matrices_np['side_mat_d'] = right_mat_dist
-    matrices_np['mat_rt'] = mat_rt
-    matrices_np['scale'] = scale
-
-    conf["camera_matrices"] = matrices_np
-    conf["scale"] = scale
-    conf["grayboard_data_path"] = grayboard_data_path
-
-    # settings
-    conf_path = "conf/settings.json"
-    with open(conf_path) as f:
-        raw = f.read()
-    settings_conf = json.loads(raw)
-    conf["settings"] = settings_conf
-
-    return conf
 
 @count_time
-def process(inupt_path, output_path, lens, shoot_type="stereo", scale=1, cache=False):
+def process_stereo(inupt_path, output_path, lens, scale=1, focus_id=0, cache=False, version=None):
     set_log_level("INFO", "DEBUG")
 
-    # handle config
-    conf = read_conf(lens, scale)
-    conf["cache"] = cache
-    conf["name"] = os.path.basename(inupt_path)
-    conf["input_folder"] = inupt_path
-    conf["output_folder"] = output_path
-    os.makedirs(output_path, exist_ok=True)
-
-    rot_count = conf["geometry"]['rot_count']
-    light_num = len(conf["geometry"]['light_str'])//2
-    
-    # calculate stereo depth
-    mid_undist_gray_image = read_folder(os.path.join(inupt_path, "mid"), conf, start_id=0, finish_id=rot_count*light_num, convert_to_gray=True, cache=cache)
-    
-    try:
-        right_undist_gray_image = read_folder(os.path.join(inupt_path, "right"), conf, start_id=0, finish_id=rot_count*light_num, convert_to_gray=True, cache=cache)
-    except:
-        right_undist_gray_image = None
-        logger.warning("right image not found")
-
-    depth, height = produce_height_map(mid_undist_gray_image, right_undist_gray_image, conf)
-    
-    del right_undist_gray_image
-    
-    # calculate normal
-    logger.info("Processing normal...")
-    albedo_weight, albedo_weight_shadow, grayboard_image, g_wb = produce_normal_map(mid_undist_gray_image, depth, conf)
-
-    # calculate AO
-    from func.texture_ao import produce_ao_map
-    if height is not None:
-        produce_ao_map(height, conf)
+    sub_folders = os.listdir(inupt_path)
+    if 'mid' not in sub_folders:
+        exit_with_error("No mid folder found!")
+    elif 'right' not in sub_folders:
+        logger.warning("No right folder found! Use mono mode.")
+        process_mono(inupt_path, output_path, lens, scale, focus_id, cache, version)
     else:
-        logger.warning("No height map, skip AO map")
-    del height
-    
-    # calculate albedo
-    mid_undist_bgr_image = read_folder(os.path.join(inupt_path, "mid"), conf, start_id=0, finish_id=rot_count*light_num, convert_to_gray=False, cache=cache)
-    roughness_albedo = produce_albedo_map(mid_undist_bgr_image, g_wb, albedo_weight, albedo_weight_shadow, grayboard_image, conf)
+        # handle config
+        conf = read_conf(lens, scale, shoot_type="stereo", focus_id=focus_id)
+        conf["cache"] = cache
+        conf["name"] = os.path.basename(inupt_path)
+        conf["input_folder"] = inupt_path
+        conf["output_folder"] = output_path
+        os.makedirs(output_path, exist_ok=True)
 
-    del mid_undist_bgr_image
+        save_json(version, lens, scale, focus_id, os.path.join(output_path, "AlgorithmPara.json"))
 
-    # calculate roughness
-    specular_image = read_folder(os.path.join(inupt_path, "mid"), conf, start_id=rot_count*light_num, finish_id=rot_count*light_num*2, convert_to_gray=True, cache=cache)
-    produce_roughness_map(mid_undist_gray_image, specular_image, roughness_albedo, grayboard_image,  conf)
+        rot_count = conf["geometry"]['rot_count']
+        light_num = len(conf["geometry"]['light_str'])//2 * rot_count
+        
+        # calculate stereo depth
+        logger.info("Loading gray images...")
+        mid_undist_gray_image = read_folder(os.path.join(inupt_path, "mid"), conf, start_id=0, finish_id=light_num, convert_to_gray=True, cache=cache)
+        
+        try:
+            logger.info("Loading side gray images...")
+            right_undist_gray_image = read_folder(os.path.join(inupt_path, "right"), conf, start_id=0, finish_id=light_num, convert_to_gray=True, cache=cache)
+        except:
+            right_undist_gray_image = None
+            logger.warning("right image not found")
 
-    del specular_image
-    del mid_undist_gray_image
+        depth, height = produce_height_map(mid_undist_gray_image, right_undist_gray_image, conf)
+        
+        del right_undist_gray_image
+        
+        # calculate normal
+        logger.info("Processing normal...")
+        mid_undist_gray_image = mid_undist_gray_image[:48]
+        albedo_weight, albedo_weight_shadow, grayboard_image, g_wb = produce_normal_map(mid_undist_gray_image, depth, conf)
 
-    # calculate sss
-    produce_sss_map(conf)
+        # calculate AO
+        from func.texture_ao import produce_ao_map
+        if height is not None:
+            produce_ao_map(height, conf)
+        else:
+            logger.warning("No height map, skip AO map")
+        del height
+        
+        # calculate albedo
+        logger.info("Loading BGR images...")
+        mid_undist_bgr_image = read_folder(os.path.join(inupt_path, "mid"), conf, start_id=0, finish_id=light_num, convert_to_gray=False, cache=cache)
+        mid_undist_bgr_image = mid_undist_bgr_image[:48]
+        grayboard_image = grayboard_image[:48]
+        roughness_albedo = produce_albedo_map(mid_undist_bgr_image, g_wb, albedo_weight, albedo_weight_shadow, grayboard_image, conf)
 
-    logger.info("All Done!")
+        del mid_undist_bgr_image
+
+        # calculate roughness
+        logger.info("Loading specular images...")
+        specular_image = read_folder(os.path.join(inupt_path, "mid"), conf, start_id=light_num, finish_id=light_num*2, convert_to_gray=True, cache=cache)
+        specular_image = specular_image[:48]
+        produce_roughness_map(mid_undist_gray_image, specular_image, roughness_albedo, grayboard_image,  conf)
+
+        del specular_image
+        del mid_undist_gray_image
+
+        # calculate sss
+        produce_sss_map(conf)
+
+        logger.info("All Done!")

@@ -31,7 +31,7 @@ pipreqs . --encoding=utf8 --force
     + -i 输入文件夹路径
     + -o 输出文件夹路径
     + -l 镜头参数，选项为{30， 50， 120}
-    + -s 缩放系数，选项为{1，2，3，4}， 默认为1
+    + -s 缩放系数，选项为{1，2，4，8}， 默认为1
     + -c 使用缓存
 
 ### 打包
@@ -48,6 +48,7 @@ pipreqs . --encoding=utf8 --force
         - 计时程序，使用python装饰器，在需要计时的方法定义上加  `@count_time` 即可
     + common_isp.py `读取raw格式的接口`
     + common_image.py `封装读取图片文件夹的方法`
+    + config_handler.py `配置文件读取`
 
 * conf `配置文件目录`
 * func `主要算法目录`
@@ -55,6 +56,7 @@ pipreqs . --encoding=utf8 --force
     + calib_xxx.py `保留的标定方法` 
 * process `流程调度文件目录`
     + stereo.py `当前的双目解算流程`
+    + mono.py `当前的单目解算流程`
 * scripts `工具脚本目录`
 * main.py `命令行封装`
 * example.py `本地测试代码`

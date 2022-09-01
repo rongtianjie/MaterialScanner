@@ -1,7 +1,8 @@
 from loguru import logger
 import time, functools
 import sys
-
+import json
+import datetime
 
 def set_log_level(console_level="INFO", file_level="INFO"):
     log_format = '<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <level>{message}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan>'
@@ -26,3 +27,16 @@ def count_time(fn):
 def exit_with_error(msg):
     logger.error(msg)
     raise Exception(msg)
+
+def save_json(version, lens, scale, focus_id, path):
+    now_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    dict = {"START_DATE": now_time, "VERSION": version, "LensModel": lens, "Resolution": str(int(8/scale))+"K", "Focus_ID": focus_id}
+    with open(path, 'w') as f:
+        json.dump(dict, f, indent=4)
+
+def add2json(dict, path):
+    with open(path, "r") as f:
+        content = json.load(f)
+    content.update(dict)
+    with open(path, "w") as f:
+        json.dump(content, f, indent=4)

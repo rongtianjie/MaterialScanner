@@ -14,6 +14,7 @@ def read_folder(folder_path, conf, convert_to_gray=False, start_id=None, finish_
     process_num = conf["settings"]["multi_process_num"]
     console_level = conf["settings"]["console_log_level"]
     file_level = conf["settings"]["file_log_level"]
+    sort_images = conf["settings"]["sort_images"]
 
     # read cache
     if cache:
@@ -30,7 +31,25 @@ def read_folder(folder_path, conf, convert_to_gray=False, start_id=None, finish_
     for filename in os.listdir(folder_path):
         if filename.lower().endswith(".raf"):
             img_list.append(filename)
-    img_list.sort()
+    
+    if img_list[0].startswith("DSCF") or img_list[0].startswith("MS"):
+        logger.info("Find fuji official images.")
+        img_list.sort()
+    elif img_list[0].startswith("mid_") or img_list[0].startswith("right_"):
+        logger.info("Find material scanner images.")
+        img_list.sort(key=lambda x: int(x.split('.')[0].split('_')[-1]))
+    else:
+        exit_with_error(f"Unknown image name: {img_list[0]}")
+
+    if sort_images:
+        rot = conf["geometry"]["rot_count"]//2
+        img_list_sorted = [0] * len(img_list)
+        for i, j in [[i,j] for i in range(rot) for j in range(16)]:
+            idx_list = [rot+i, rot*3+i, rot*5+i, rot*7+i, i, rot*2+i, rot*4+i, rot*6+i]
+            idx_list = idx_list + [x+rot*8 for x in idx_list]
+            img_list_sorted[idx_list[j]] = img_list[i*16+j]
+        img_list = img_list_sorted
+        logger.info("Images sorted.")
 
     img_list = img_list[start_id : finish_id]
     

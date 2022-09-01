@@ -3,15 +3,15 @@ import os
 def check():
     # conf
     file_list = ["fuji_30.json", "fuji_50.json", "fuji_120.json", "settings.json"]
-    copy("dist/main/conf", file_list, "conf", r"\\10.0.0.3\ai\MaterialScanner\0.1.0\conf")
+    copy("dist/main/conf", file_list, "conf", "conf")
 
     # ext
     file_list = ["ACMMP.exe", "exiftool.exe", "ma_stereo.dll", "opencv_world454d.dll"]
-    copy("dist/main/ext", file_list, "ext", r"\\10.0.0.3\ai\MaterialScanner\0.1.0\ext")
+    copy("dist/main/ext", file_list, "ext", r"\\10.0.0.5\ai\MaterialScanner\0.1.0\ext")
 
     # pre data
     file_list = ["grayboard_result_30.npz", "grayboard_result_50.npz", "grayboard_result_120.npz"]
-    copy("dist/main/pre_data", file_list, "pre_data", r"\\10.0.0.3\ai\MaterialScanner\0.1.0\pre_data")
+    copy("dist/main/pre_data", file_list, "pre_data", r"\\10.0.0.5\ai\MaterialScanner\0.1.0\pre_data")
 
     # taichi
     os.makedirs("dist/main/func", exist_ok=True)

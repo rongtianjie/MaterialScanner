@@ -1,12 +1,12 @@
+# cython:language_level=3
 from base.common import *
 import taichi as ti
-import numpy as np
 import cv2
 import torch
 
-# if gpu memory larger than 20G, use CUDA to init taichi
-if torch.cuda.is_available() and torch.cuda.mem_get_info(device=torch.device('cuda:0'))[0] > 21474836480:
-    ti.init(arch=ti.cuda)
+# if available gpu memory larger than 20G, use CUDA to init taichi
+if torch.cuda.is_available() and torch.cuda.mem_get_info(device=torch.device('cuda:0'))[0] > 20*1024**3:
+    ti.init(arch=ti.cuda, device_memory_GB=20)
     logger.info("Use CUDA to init taichi")
 else:
     ti.init(arch=ti.cpu)

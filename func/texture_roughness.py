@@ -1,7 +1,7 @@
+# cython:language_level=3
 from base.common import *
 import torch
 import cv2
-import numpy as np
 
 
 @count_time
@@ -33,12 +33,14 @@ def produce_roughness_map(mid_undist_image, specular_image, roughness_albedo, gr
         specular_image[:, 68*4//scale:-68*4//scale,432*4//scale:-432*4//scale] / roughness_albedo)
     roughness = (roughness * 65535).astype(np.uint16)
     cv2.imencode('.png', roughness)[1].tofile(f'{out_folder}/T_{name}_Roughness_ABD_{8//scale}K.png')
+    
+    # roughness = solve_roughness(
+    #     (mid_undist_image / grayboard_image)[:, 68*4//scale:-68*4//scale, 432*4//scale:-432*4//scale],
+    #     (specular_image / grayboard_image)[:, 68*4//scale:-68*4//scale, 432*4//scale:-432*4//scale])
+    # roughness = (roughness * 65535).astype(np.uint16)
+    # cv2.imencode('.png', roughness)[1].tofile(f'{out_folder}/T_{name}_Roughness_REF_{8//scale}K.png')
 
-    roughness = solve_roughness(
-        (mid_undist_image / grayboard_image)[:, 68*4//scale:-68*4//scale, 432*4//scale:-432*4//scale],
-        (specular_image / grayboard_image)[:, 68*4//scale:-68*4//scale, 432*4//scale:-432*4//scale])
-    roughness = (roughness * 65535).astype(np.uint16)
-    cv2.imencode('.png', roughness)[1].tofile(f'{out_folder}/T_{name}_Roughness_REF_{8//scale}K.png')
+    logger.success(f"Roughness map saved.")
 
 def solve_roughness(diffuse_img, specular_img, best_k = -1):
     roughness = (torch.FloatTensor(specular_img/65535) - torch.FloatTensor(diffuse_img/65535)).abs_()

@@ -1,6 +1,21 @@
 {
     "console_log_level": "INFO",
-    "file_log_level": "INFO",
-    "multi_process_num": 8,
-    "sort_images": true
+    "file_log_level": "DEBUG",
+    "dynamic_process_num": false,
+    "process_profile": {
+        "default": 8,
+        "128G": 12,
+        "256G": 20
+    },
+    "demosaicing_method": [
+        "[0] colour_demosaicing.bilinear",
+        "[1] colour_demosaicing.Malvar2004",
+        "[2] colour_demosaicing.Menon2007",
+        "[3] pytorch.MHC_GPU",
+        "[4] pytorch.MHC_CPU"
+    ],
+    "demosaicing_method_index": 3,
+    "sort_images": true,
+    "model_filtering": true,
+    "check_images": true
 }

@@ -6,11 +6,17 @@ from process.stereo import process_stereo
 from process.mono import process_mono
 import multiprocessing
 
-VERSION = "0.3.0"
+def VERSION():
+    return "0.9.1"
 
-def parse(input_path, output_path, lens, shoot_type, scale, focus_id, cache=False):
+def parse(input_path: str, output_path: str, lens: str, shoot_type: str, scale: int, focus_id: int, cache=False):
+    
+    set_log_level("INFO", "DEBUG")
+
     if output_path is None:
         output_path = os.path.join(input_path, "out")
+
+    logger.info(f"INPUT: [{input_path}]")
 
     # try:
     #     with open(os.path.join(input_path, "CameraPara.json"), "r") as f:
@@ -24,11 +30,11 @@ def parse(input_path, output_path, lens, shoot_type, scale, focus_id, cache=Fals
 
     try:
         if shoot_type == "stereo":
-            process_stereo(input_path, output_path, lens, scale, focus_id, cache, version=VERSION)
+            process_stereo(input_path, output_path, lens, scale, focus_id, cache, version=VERSION())
         elif shoot_type == "mono":
-            process_mono(input_path, output_path, lens, scale, focus_id, cache, version=VERSION)
+            process_mono(input_path, output_path, lens, scale, focus_id, cache, version=VERSION())
     except Exception as e:
-        print("Error: ", e)
+        logger.error(e)
         error = {"Error": str(e)}
         add2json(error, os.path.join(output_path, "AlgorithmPara.json"))
         return -1

@@ -1,7 +1,7 @@
+# cython:language_level=3
 from base.common import *
 from base.common_image import rgb_to_srgb
 import cv2
-import numpy as np
 
 
 def calib(marker_img, conf, mat_k, mat_dist):

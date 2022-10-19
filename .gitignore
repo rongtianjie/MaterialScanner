@@ -15,7 +15,7 @@ dist/
 downloads/
 eggs/
 
-ext/
+ext/opencv_world454d.dll
 log/
 pre_data/
 cache/

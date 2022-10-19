@@ -1,8 +1,7 @@
+# cython:language_level=3
 from base.common import *
 from base.common_image import read_folder, rgb_to_srgb
-import numpy as np
 import cv2
-import os
 
 
 @count_time
@@ -24,7 +23,8 @@ def produce_sss_map(conf):
             img_list.append(filename)
     
     if len(img_list) > light_num*2:
-        sss_image = read_folder(os.path.join(in_folder, "mid"), conf, start_id=light_num*2, finish_id=light_num*2+1, convert_to_gray=False, cache=cache)
+        sss_image, _, cache = read_folder(os.path.join(in_folder, "mid"), conf, start_id=light_num*2, finish_id=light_num*2+1, keep_rgb=True)
+        os.remove(cache)
         sss_image = sss_image[0]
     else:
         logger.warning("No sss image found.")
@@ -35,3 +35,4 @@ def produce_sss_map(conf):
     sss = rgb_to_srgb(sss*gain, 1)
     sss = (sss * 65535).astype(np.uint16)
     cv2.imencode('.png', sss)[1].tofile(f'{out_folder}/T_{name}_SSS_{8//scale}K.png')
+    logger.success(f"SSS map saved.")

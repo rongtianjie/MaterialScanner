@@ -1,5 +1,9 @@
 # MaterialScanner
 新版材质扫描仪算法程序
+
+### Change Log
+***
+[点击跳转](ChangeLog.md)
  
 ### Python环境
 ***
@@ -20,6 +24,22 @@ pip install pipreqs
 pipreqs . --encoding=utf8 --force
 ```
 
+#### Exiftool
+1. 下载 https://exiftool.org/exiftool-12.40.zip
+2. 解压缩并且把 `.exe` 文件名改成 `exiftool.exe`
+3. ~~把这个 `.exe` 放到 `scripts` 下面，比如如果没有用 conda，那么就是 `C:\Users\...\AppData\Local\Programs\Python\Python39\Scripts`~~
+> **[中文支持]** 在高版本的 python（好像 3.6 不需要但是 3.9 需要的，应该是这之间 python 更新的 encoding 逻辑导致的），如果要支持中文路径，需要对 python 接口的源码进行hack。如果你运行有空格或者中文路径的数据，在 `exiftool` 里面报了和 encoding 相关的错误，可以尝试找到你的 python 安装环境下 `pyexiftool` 模块，把 `exiftool.py` 923 行:
+```
+raw_stdout = _read_fd_endswith(fdout, seq_ready.encode(self._encoding), self._block_size).decode(self._encoding)
+```
+改成:
+```
+raw_before_decoding = _read_fd_endswith(fdout, seq_ready.encode(self._encoding), self._block_size)
+try:
+    raw_stdout = raw_before_decoding.decode(self._encoding)
+except Exception as e:
+    raw_stdout = raw_before_decoding.decode('utf-8')
+```
 
 ### 运行
 ***
@@ -34,10 +54,33 @@ pipreqs . --encoding=utf8 --force
     + -s 缩放系数，选项为{1，2，4，8}， 默认为1
     + -c 使用缓存
 
+### 输出
+***
+```
+-- folder_name
+    | out
+        | acmmp_reference
+        | reference
+        | AlgorithmPara.json
+        | T_{folder_name}_Albedo_{scale}K.png
+        | T_{folder_name}_Albedo_Corrected_{scale}K.png
+        | T_{folder_name}_Normal_{scale}K.png
+        | T_{folder_name}_Normal_Original_{scale}K.png
+        | T_{folder_name}_Normal_Plain_{scale}K.png
+        | T_{folder_name}_Normal_Shadow_Original_{scale}K.png
+        | T_{folder_name}_Roughness_0_{scale}K.png
+        | T_{folder_name}_Roughness_2_{scale}K.png
+        | T_{folder_name}_Roughness_ABD_{scale}K.png
+        | T_{folder_name}_AO_{scale}K.png
+        | T_{folder_name}_Displacement_{scale}K.exr
+```
+
 ### 打包
 ***
 
-双击 `package.cmd` ，将使用 `pyinstaller` 打包 `main.py` 文件为exe程序，供前台界面调用。
+```
+python .\scripts\compile.py build_ext --inplace
+```
 
 ### 代码结构简介
 ***

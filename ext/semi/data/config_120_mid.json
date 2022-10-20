@@ -1,0 +1,38 @@
+{"data":
+    {
+    "I":1,
+    "mask":1,
+    "K":1,
+      "z0":5
+    }
+    ,
+"calib":{
+    "S":1,
+    "Phi":1,
+    "mu":1,
+    "Dir":1
+    }
+    ,
+"params":{
+"semi_calibrated":1,
+"estimator":"Lp",
+"lambd":0.7,
+"self_shadows":1,
+
+"obj_name": "side1_HR",
+"use_depth":1,
+"cal_shadow":1,
+"size":1,
+"scales":5,
+"zeta":50,
+"save_current_result":1,
+"cos4a":1,
+
+"maxit":100,
+"tol":1e-3,
+"tol_normals":0.1,
+"precond":"ichol",
+"display":0,
+"tol_pcg":1e-6,
+"maxit_pcg":25
+    }}

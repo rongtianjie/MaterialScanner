@@ -1,0 +1,11 @@
+{
+    "path":{
+        "input_path": "test/7-12-input",
+        "result_save_path":"result/7-12-res/"
+    },
+    "chessboard":{
+        "board_width": 11,
+        "board_height": 8,
+        "board_size": 5.0
+    }
+}

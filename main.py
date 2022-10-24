@@ -7,7 +7,7 @@ from process.mono import process_mono
 import multiprocessing
 
 def VERSION():
-    return "0.9.1"
+    return "0.9.2"
 
 def parse(input_path: str, output_path: str, lens: str, shoot_type: str, scale: int, focus_id: int, cache=False):
     

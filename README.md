@@ -103,5 +103,3 @@ python .\scripts\compile.py build_ext --inplace
 * scripts `工具脚本目录`
 * main.py `命令行封装`
 * example.py `本地测试代码`
-* run.cmd `运行本地测试代码命令，加入了运行前依赖检查`
-* package.cmd `打包命令`

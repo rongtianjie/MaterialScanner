@@ -32,6 +32,7 @@ def produce_sss_map(conf):
 
     # solve sss
     sss = sss_image[68*4//scale:-68*4//scale, 432*4//scale:-432*4//scale].astype(np.float32) / 65535
+    sss = (sss*np.array([1.03, 1, 0.97])).astype(np.float32)
     sss = rgb_to_srgb(sss*gain, 1)
     sss = (sss * 65535).astype(np.uint16)
     cv2.imencode('.png', sss)[1].tofile(f'{out_folder}/T_{name}_SSS_{8//scale}K.png')

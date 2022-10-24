@@ -49,7 +49,7 @@
     },
     "normal_map": {
         "filter_original_size": 8,
-        "specular_removal": 2,
+        "specular_removal": 4,
         "deshadow_ratio": 0.4,
         "normal_batch_count": 8
     },

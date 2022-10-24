@@ -25,7 +25,7 @@ def process_stereo(input_path: str, output_path: str, lens: str, scale=1, focus_
     sub_folders = os.listdir(input_path)
     if 'mid' not in sub_folders:
         exit_with_error("No mid folder found!")
-    elif lens=="120" and 'right' not in sub_folders:
+    elif 'right' not in sub_folders and "MVS" not in sub_folders:
         logger.warning("No right folder found! Use mono mode.")
         process_mono(input_path, output_path, lens, scale, focus_id, cache, version)
     else:

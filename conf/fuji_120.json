@@ -49,7 +49,11 @@
     "normal_map": {
         "filter_original_size": 8,
         "specular_removal": 2,
-        "deshadow_ratio": 0.4
+        "deshadow_ratio": 0.4,
+        "normal_batch_count": 8
+    },
+    "albedo_map":{
+        "albedo_batch_count": 4    
     },
     "sss_map": {
         "gain": 0.8

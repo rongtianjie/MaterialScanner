@@ -14,8 +14,9 @@ develop-eggs/
 dist/
 downloads/
 eggs/
+*.spec
 
-ext/opencv_world454d.dll
+ext/
 log/
 pre_data/
 cache/

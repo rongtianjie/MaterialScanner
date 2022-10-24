@@ -42,6 +42,7 @@ def read_folder(folder_path, conf, keep_rgb, start_id=None, finish_id=None):
             if gray is None:
                 logger.warning("[gray] is None.")
                 raise Exception
+            logger.success("Cache loaded.")
             return rgb, gray, cache_file
         except:
             logger.warning(f"Cache file is broken: {cache_file}")
@@ -118,6 +119,7 @@ def read_folder(folder_path, conf, keep_rgb, start_id=None, finish_id=None):
     logger.info("Saving cache...")
     np.savez(cache_file, gray=gray, rgb=rgb)
     logger.info(f"Cache [{cache_file}] saved.")
+    logger.success("Folder read.")
 
     return rgb, gray, cache_file
 
@@ -159,6 +161,8 @@ def rgb_to_srgb(image, max_value = -1):
             max_value = 255
         elif image.dtype == np.uint16:
             max_value = 65535
+        elif image.dtype == np.float32:
+            max_value = 1
         else:
             raise ValueError("Unknown image type.")
     ret = image.astype(np.float32)
@@ -184,7 +188,7 @@ def check_images(input_path):
         try:
             executor = ProcessPoolExecutor(max_workers=8)
             tasks = [executor.submit(check, fp) for fp in img_list]
-            for task in tqdm(as_completed(tasks)):
+            for task in tqdm(as_completed(tasks), total=len(tasks)):
                 task.result()
             wait(tasks)
         except:

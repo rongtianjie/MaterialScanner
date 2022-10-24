@@ -15,7 +15,7 @@ def produce_albedo_map(mid_undist_image, g_wb, albedo_weight, albedo_weight_shad
     rot_count = conf["geometry"]['rot_count']
     light_num = len(conf["geometry"]['light_str'])//2 * rot_count
     gray_scale = conf["grayboard"]["gray_scale"]
-    batch_count = conf["albedo_map"]["albedo_batch_count"]
+    # batch_count = conf["albedo_map"]["albedo_batch_count"]
 
     grayboard_image = grayboard_image[:light_num]
 
@@ -25,7 +25,7 @@ def produce_albedo_map(mid_undist_image, g_wb, albedo_weight, albedo_weight_shad
 
     # solve albedo without shadow
     logger.info("Solving albedo without shadow...")
-    albedo = solve_albedo(mid_undist_image[:, 68*4//scale:-68*4//scale, 432*4//scale:-432*4//scale], albedo_weight, 6, rot_count, light_num, batch_count)
+    albedo = solve_albedo(mid_undist_image[:, 68*4//scale:-68*4//scale, 432*4//scale:-432*4//scale], albedo_weight, 6, rot_count, light_num)
     del albedo_weight
     
     albedo[...,0] *= b_weight

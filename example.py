@@ -5,7 +5,7 @@ from func.calib_grayboard import generate_grayboard
 import os
 from main import parse
 
-input_path = r"C:\Users\ecoplants\Desktop\叶子_6"
+input_path = r"C:\Users\ecoplants\Desktop\树叶_1"
 output_path = os.path.join(input_path, "test")
 
 if __name__ == "__main__":
@@ -27,4 +27,4 @@ if __name__ == "__main__":
     except:
         pass
 
-    parse(input_path, output_path, lens, "stereo", 1, focus_id, cache=True)
+    parse(input_path, output_path, lens=lens, shoot_type="stereo", scale=1, focus_id=focus_id, cache=True)

@@ -39,7 +39,7 @@ def produce_ao_map(height_img, conf):
     logger.debug(f"Height range: {min_height} - {max_height}")
 
     ti_height_image = ti.field(dtype=float, shape=(height, width))
-    ti_height_image.from_numpy(height_img*height_scale_val)
+    ti_height_image.from_numpy(height_img*height_scale_val) 
 
     ti_ao_image = ti.field(dtype=float, shape=(height, width))
 
@@ -53,12 +53,22 @@ def produce_ao_map(height_img, conf):
 
     @ti.func
     def rand_point():
+        '''
+            rand-sample in semi-sphere:
+            phi = arccos(sqrt(1-r2)))
+            theta = 2*pi*r1
+        :return:
+        '''
         r1 = ti.random(dtype=float)
         r2 = ti.random(dtype=float)
-        x = ti.cos(2 * ti.math.pi * r1) * 2 * ti.sqrt(r2 * (1-r2))
-        y = ti.sin(2 * ti.math.pi * r1) * 2 * ti.sqrt(r2 * (1-r2))
-        z = 1 - 2 * r2
-        return ti.Vector([x,y,z])
+        # x = ti.cos(2 * ti.math.pi * r1) * 2 * ti.sqrt(r2 * (1-r2))
+        # y = ti.sin(2 * ti.math.pi * r1) * 2 * ti.sqrt(r2 * (1-r2))
+        # z = 1 - 2 * r2
+        x = ti.cos(2 * ti.math.pi * r1) * ti.sqrt(r2)
+        y = ti.sin(2 * ti.math.pi * r1) * ti.sqrt(r2)
+        z = ti.sqrt(1 - r2)
+
+        return ti.Vector([x, y, z])
 
     @ti.func
     def rand_dir_along_normal(n):
@@ -101,28 +111,29 @@ def produce_ao_map(height_img, conf):
             pix_depth = ti_height_image[h, w]
             pix_pos = ti.Vector([w, h, pix_depth])
 
-            for i in range(dir_count):
+            for _ in range(dir_count):
                 dir = ti.math.normalize(rand_dir_along_normal(n))
                 cosn = ti.math.dot(dir, n)
-                if dir[0] == 0 and dir[1]== 0:
+                if dir[0] == 0 and dir[1] == 0:
                     continue
-                dir_2d = ti.Vector([dir[0], dir[1]])
-                norm = dir_2d.norm()
-                dir = dir/norm
+                # dir_2d = ti.Vector([dir[0], dir[1]])
+                # norm = dir_2d.norm()
+                # dir = dir/norm
                 step = 1
 
                 for j in range(width):
                     if step > width/8:
                         break
-                    current_pos = pix_pos + dir*step
+                    current_pos = pix_pos + dir * step
 
-                    if current_pos[0]<0 or current_pos[0] > height or current_pos[1]<0 or current_pos[1]> width:
+                    if current_pos[0] < 0 or current_pos[0] > height or current_pos[1] < 0 or current_pos[1] > width:
                         break
 
                     current_z = ti_height_image[int(ti.round(current_pos[1])), int(ti.round(current_pos[0]))]
                     
-                    if dir[2]>0 and current_pos[2] > max_height:
+                    if dir[2] > 0 and current_pos[2] > max_height:
                         break
+
                     if current_pos[2] - 0.01 < current_z:
                         ao += cosn
                         break
@@ -145,4 +156,7 @@ def denormalize_img(in_img, dtype="uint8"):
         image = (in_img*255).astype(np.uint8)
     elif dtype == "uint16":
         image = (in_img*65535).astype(np.uint16)
+    else:
+        image = None
+        exit_with_error("Invalid dtype")
     return image

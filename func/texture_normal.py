@@ -11,6 +11,7 @@ def produce_normal_map(mid_undist_image, depth, conf):
     output_dir = conf["output_folder"]
     scale = conf["scale"]
     name = conf["name"]
+    lens = conf["lens"]
 
     camera_height = conf["geometry"]["camera_height"]
     grayboard_height = conf["geometry"]["grayboard_height"]
@@ -28,34 +29,42 @@ def produce_normal_map(mid_undist_image, depth, conf):
     os.makedirs(f'{output_dir}/reference', exist_ok=True)
 
     # generate reference normal map based on depth
-    normal_ref = dsp2norm(depth)
-    normal_ref = normal_ref * 255
-    normal_ref = normal_ref.astype(np.uint8)
-    cv2.imencode('.png', normal_ref)[1].tofile(f'{output_dir}/reference/normal_ref.png')
-    logger.success(f'[normal_ref] saved.')
+    if depth is not None:
+        normal_ref = dsp2norm(depth, alpha=1)
+        normal_ref = normal_ref * 255
+        normal_ref = normal_ref.astype(np.uint8)
+        cv2.imencode('.png', normal_ref)[1].tofile(f'{output_dir}/reference/normal_ref.png')
+        logger.success(f'[normal_ref] saved.')
 
-    # load grayboard data
-    if not os.path.exists(grayboard_data_path):
-        exit_with_error(f"{grayboard_data_path} not exist")
-    grayboard_data = np.load(grayboard_data_path, allow_pickle=True)
-
-    grayboard_depth = camera_height - grayboard_height
-    logger.info(f'No grayboard_depth loaded, use calculated grayboard_depth={grayboard_depth} instead.')
-
-    # calculate light field
     plain_depth = np.ones([8192//scale, 8192//scale]) * camera_height
     light_coord = get_light_coord(conf["geometry"])[:light_num]
     pixel_coord = get_pixel_coord(mat_k, camera_height, plain_depth, scale)
 
-    grayboard_image = grayboard_data['data'][:mid_undist_image.shape[0]]
-    g_wb = grayboard_data['wb']
-    if scale != 1:
-        grayboard_image = cv2.resize(grayboard_image.transpose(1, 2, 0),
-                    (grayboard_image.shape[2]//scale, grayboard_image.shape[1]//scale)).transpose(2, 0, 1)
+    cache_file = f"pre_data/lightfield_{lens}_{scale}_{camera_height}.npz"
+    if not os.path.exists(grayboard_data_path):
+        exit_with_error(f"{grayboard_data_path} not exist")
+    if os.path.exists(cache_file):
+        lightfield_image = np.load(cache_file)['data']
+        logger.success(f'Lightfield cache loaded')
+    else:
+        # load grayboard data
+        grayboard_data = np.load(grayboard_data_path, allow_pickle=True)
 
-    lightfield_image = get_lightfield_from_grayboard(
-            grayboard_image, gray_scale, light_coord, pixel_coord,
-            mat_k, camera_height, grayboard_depth)
+        grayboard_depth = camera_height - grayboard_height
+        logger.info(f'No grayboard_depth loaded, use calculated grayboard_depth={grayboard_depth} instead.')
+
+        # calculate light field
+        grayboard_image = grayboard_data['data'][:mid_undist_image.shape[0]]
+        g_wb = grayboard_data['wb']
+        if scale != 1:
+            grayboard_image = cv2.resize(grayboard_image.transpose(1, 2, 0),
+                        (grayboard_image.shape[2]//scale, grayboard_image.shape[1]//scale)).transpose(2, 0, 1)
+
+        lightfield_image = get_lightfield_from_grayboard(
+                grayboard_image, gray_scale, light_coord, pixel_coord,
+                mat_k, camera_height, grayboard_depth)
+        np.savez(cache_file, data=lightfield_image)
+        logger.success(f'Lightfield cached')
 
     # for i in range(light_num):
     #     cv2.imencode('.png', (lightfield_image[i]*65535).astype(np.uint16))[1].tofile(
@@ -129,7 +138,29 @@ def produce_normal_map(mid_undist_image, depth, conf):
     cv2.imencode('.png', normal_clip)[1].tofile(f'{output_dir}/reference/Normal_Shadow_Clip_{8//scale}K.png')
     normal[...,2][normal[...,2] < 0] = 1e-3
 
-    save_normal(normal, output_dir, f"T_{name}_Normal_Shadow_Original_{8//scale}K")
+    save_normal(normal, output_dir, f"T_{name}_Normal_Shadow_Original_{8//scale}K.png")
+
+    if depth is not None:
+        logger.info("Depth correction")
+        normal_corrected, normal_shift, loss_u, loss_v = correct_normal(normal, depth, mat_k, scale, kernel_size)
+
+        normal_clip = np.zeros((normal.shape[0], normal.shape[1]), dtype=np.uint8)
+        normal_clip[normal[...,2] < 0] = 255
+        # cv2.imencode('.png', normal_clip)[1].tofile(f'{output_dir}/reference/Normal_Clip_{8//scale}K.png')
+        normal_corrected[...,2][normal_corrected[...,2] < 0] = 1e-3
+
+        save_normal(normal_corrected, output_dir, f'T_{name}_Normal_Corrected_Shadow_{8//scale}K.png')
+
+        # normal_shift = normal_shift / 2 + 0.5
+        # normal_shift = normal_shift * 65535
+        # normal_shift = normal_shift[..., ::-1]
+        # normal_shift = normal_shift.astype(np.uint16)
+        # cv2.imencode('.png', normal_shift)[1].tofile(
+        #     f'{output_dir}/reference/Normal_Shift_{8//scale}K.png')
+        # cv2.imencode('.png', (loss_u/loss_u.max()*65535).astype(np.uint16))[1].tofile(
+        #     f'{output_dir}/reference/Normal_Shift_Loss_U_{8//scale}K.png')
+        # cv2.imencode('.png', (loss_v/loss_v.max()*65535).astype(np.uint16))[1].tofile(
+        #     f'{output_dir}/reference/Normal_Shift_Loss_V_{8//scale}K.png')
 
     return albedo_weight, albedo_weight_shadow, grayboard_image, g_wb
 
@@ -166,10 +197,11 @@ def get_pixel_coord(mat_k, camera_height, depth, scale):
 def get_lightfield_from_grayboard(grayboard_image, gray_scale, light_coord, pixel_coord, mat_k, camera_height, grayboard_depth):
     z_coord = (camera_height - grayboard_depth)
     lightfields = []
-    executor = ProcessPoolExecutor(max_workers=8)
+    executor = ProcessPoolExecutor(max_workers=2)
     tasks = [executor.submit(lightfield_subprocess, light_coord[i], pixel_coord, z_coord, grayboard_depth, mat_k, grayboard_image[i], gray_scale) for i in range(light_coord.shape[0])]
     for task in tqdm(as_completed(tasks), total=len(tasks)):
         lightfields.append(task.result())
+    wait(tasks)
     return np.array(lightfields)
 
 def lightfield_subprocess(light_coord, pixel_coord, z_coord, grayboard_depth, mat_k, grayboard_image, gray_scale):
@@ -356,7 +388,7 @@ def save_normal(normal: ndarray, output_dir: str, filename: str):
     normal = normal * 65535
     normal = normal[..., ::-1]
     normal = normal.astype(np.uint16)
-    cv2.imencode('.png', normal)[1].tofile(f'{output_dir}/{filename}.png')
+    cv2.imencode('.png', normal)[1].tofile(f'{output_dir}/{filename}')
     logger.success(f'[{filename}] saved.')
 
 def dsp2norm(img, alpha=0.1):

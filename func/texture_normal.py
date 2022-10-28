@@ -43,9 +43,6 @@ def produce_normal_map(mid_undist_image, depth, conf):
     cache_file = f"pre_data/lightfield_{lens}_{scale}_{camera_height}.npz"
     if not os.path.exists(grayboard_data_path):
         exit_with_error(f"{grayboard_data_path} not exist")
-    if os.path.exists(cache_file):
-        lightfield_image = np.load(cache_file)['data']
-        logger.success(f'Lightfield cache loaded')
     else:
         # load grayboard data
         grayboard_data = np.load(grayboard_data_path, allow_pickle=True)
@@ -59,7 +56,11 @@ def produce_normal_map(mid_undist_image, depth, conf):
         if scale != 1:
             grayboard_image = cv2.resize(grayboard_image.transpose(1, 2, 0),
                         (grayboard_image.shape[2]//scale, grayboard_image.shape[1]//scale)).transpose(2, 0, 1)
-
+    
+    if os.path.exists(cache_file):
+        lightfield_image = np.load(cache_file)['data']
+        logger.success(f'Lightfield cache loaded')
+    else:
         lightfield_image = get_lightfield_from_grayboard(
                 grayboard_image, gray_scale, light_coord, pixel_coord,
                 mat_k, camera_height, grayboard_depth)
@@ -71,6 +72,28 @@ def produce_normal_map(mid_undist_image, depth, conf):
     #         f'{output_dir}/reference/lightfield_{i}.png')
     
     mid_texture_image = mid_undist_image[:, 68*4//scale:-68*4//scale, 432*4//scale:-432*4//scale]
+    
+    # normal with shadow
+    logger.info("Processing shadow normal map")
+    normal, albedo_weight_shadow = solve_normal(mid_texture_image, lightfield_image, light_coord, pixel_coord, 0, mid_texture_image.shape[0], batch_count)
+
+    normal_clip = np.zeros((normal.shape[0], normal.shape[1]), dtype=np.uint8)
+    normal_clip[normal[...,2] < 0] = 255
+    cv2.imencode('.png', normal_clip)[1].tofile(f'{output_dir}/reference/Normal_Shadow_Clip_{8//scale}K.png')
+    normal[...,2][normal[...,2] < 0] = 1e-3
+
+    save_normal(normal, output_dir, f"T_{name}_Normal_Shadow_Original_{8//scale}K.png")
+
+    if depth is not None:
+        logger.info("Depth correction")
+        normal_corrected, normal_shift, loss_u, loss_v = correct_normal(normal, depth, mat_k, scale, kernel_size)
+
+        normal_clip = np.zeros((normal.shape[0], normal.shape[1]), dtype=np.uint8)
+        normal_clip[normal[...,2] < 0] = 255
+        # cv2.imencode('.png', normal_clip)[1].tofile(f'{output_dir}/reference/Normal_Clip_{8//scale}K.png')
+        normal_corrected[...,2][normal_corrected[...,2] < 0] = 1e-3
+
+        save_normal(normal_corrected, output_dir, f'T_{name}_Normal_Corrected_Shadow_{8//scale}K.png')
     
     # slove normal without shadow
     logger.info("Processing original normal map")
@@ -129,27 +152,7 @@ def produce_normal_map(mid_undist_image, depth, conf):
     cv2.imencode('.png', (loss_v/loss_v.max()*65535).astype(np.uint16))[1].tofile(
         f'{output_dir}/reference/Normal_Plain_Shift_Loss_V_{8//scale}K.png')
 
-    # normal with shadow
-    logger.info("Processing shadow normal map")
-    normal, albedo_weight_shadow = solve_normal(mid_texture_image, lightfield_image, light_coord, pixel_coord, 0, mid_texture_image.shape[0], batch_count)
-
-    normal_clip = np.zeros((normal.shape[0], normal.shape[1]), dtype=np.uint8)
-    normal_clip[normal[...,2] < 0] = 255
-    cv2.imencode('.png', normal_clip)[1].tofile(f'{output_dir}/reference/Normal_Shadow_Clip_{8//scale}K.png')
-    normal[...,2][normal[...,2] < 0] = 1e-3
-
-    save_normal(normal, output_dir, f"T_{name}_Normal_Shadow_Original_{8//scale}K.png")
-
-    if depth is not None:
-        logger.info("Depth correction")
-        normal_corrected, normal_shift, loss_u, loss_v = correct_normal(normal, depth, mat_k, scale, kernel_size)
-
-        normal_clip = np.zeros((normal.shape[0], normal.shape[1]), dtype=np.uint8)
-        normal_clip[normal[...,2] < 0] = 255
-        # cv2.imencode('.png', normal_clip)[1].tofile(f'{output_dir}/reference/Normal_Clip_{8//scale}K.png')
-        normal_corrected[...,2][normal_corrected[...,2] < 0] = 1e-3
-
-        save_normal(normal_corrected, output_dir, f'T_{name}_Normal_Corrected_Shadow_{8//scale}K.png')
+    
 
         # normal_shift = normal_shift / 2 + 0.5
         # normal_shift = normal_shift * 65535

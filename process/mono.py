@@ -44,6 +44,7 @@ def process_mono(input_path: str, output_path: str, lens: str, scale=1, focus_id
         logger.info("Loading gray images...")
         _, mid_undist_gray_image, cache = read_folder(os.path.join(input_path, "mid"), conf, start_id=0, finish_id=light_num, keep_rgb=True)
         cache_list.append(cache)
+        logger.success("Mid gray images loaded.")
         
         # calculate normal
         logger.info("Processing normal...")

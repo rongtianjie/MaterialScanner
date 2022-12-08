@@ -21,6 +21,10 @@ def read_conf(input_path, lens, scale, shoot_type, focus_id):
     conf = json.loads(raw)
     conf["lens"] = lens
 
+    # Mono scan mode support
+    if shoot_type == "mono":
+        conf["geometry"]['rot_count'] = 8
+
     if lens == "120":
         if os.path.exists(cam_conf_path):
             with open(cam_conf_path) as f:

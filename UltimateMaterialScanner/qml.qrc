@@ -1,0 +1,27 @@
+<RCC>
+    <qresource prefix="/">
+        <file>qml/LightButton.qml</file>
+        <file>qml/main.qml</file>
+        <file>qml/SettingItem.qml</file>
+        <file>qml/LightControlItem.qml</file>
+        <file>qml/StyleConfig.qml</file>
+        <file>qml/CameraLiveView.qml</file>
+        <file>qml/ScanResolutionList.qml</file>
+        <file>qml/CameraSettingsItem.qml</file>
+        <file>qml/PopupAnimation.qml</file>
+        <file>qml/CameraPropertyEditItem.qml</file>
+        <file>qml/CameraIntPropertyEditItem.qml</file>
+        <file>qml/Base/TitleItem.qml</file>
+        <file>qml/Base/DRadioButton.qml</file>
+        <file>qml/Base/DSwitch.qml</file>
+        <file>qml/Base/DComboBox.qml</file>
+        <file>qml/Base/DSpinBox.qml</file>
+        <file>qml/Base/DSlider.qml</file>
+        <file>qml/Base/DDoubleSpinBox.qml</file>
+        <file>qml/Base/DButton.qml</file>
+        <file>qml/Base/DCheckBox.qml</file>
+        <file>qml/Base/DMessageBox.qml</file>
+        <file>qml/Base/DTextInput.qml</file>
+        <file>qml/Base/DBusyIndicator.qml</file>
+    </qresource>
+</RCC>

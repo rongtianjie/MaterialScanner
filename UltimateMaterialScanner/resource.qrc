@@ -1,0 +1,22 @@
+<RCC>
+    <qresource prefix="/">
+        <file>resources/Images/light_off.svg</file>
+        <file>resources/Images/light_on.svg</file>
+        <file>resources/Images/background.png</file>
+        <file>resources/Images/square.svg</file>
+        <file>resources/Images/square_check.svg</file>
+        <file>resources/Images/setting.svg</file>
+        <file>resources/Images/close.svg</file>
+        <file>resources/Images/no_signal.jpg</file>
+        <file>resources/Images/exchange.svg</file>
+        <file>resources/Images/refresh.svg</file>
+        <file>resources/Images/connected.png</file>
+        <file>resources/Images/disconnected.png</file>
+        <file>resources/icon.ico</file>
+        <file>resources/icon.png</file>
+        <file>resources/Images/delete.svg</file>
+    </qresource>
+    <qresource prefix="/Fonts">
+        <file>resources/Fonts/Font Awesome 5 Pro-Regular-400.otf</file>
+    </qresource>
+</RCC>
